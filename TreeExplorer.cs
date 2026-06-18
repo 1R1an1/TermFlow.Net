@@ -30,6 +30,10 @@ namespace ConsoleUtils
             {
                 return await InternalExploreAsync(title, rootDir, isMulti: false, filter, token).ContinueWith(t => t.Result.FirstOrDefault(), token);
             }
+            catch (OperationCanceledException)
+            {
+                return string.Empty;
+            }
             finally
             {
                 Engine.ExitFullScreen();
@@ -46,6 +50,10 @@ namespace ConsoleUtils
             try
             {
                 return await InternalExploreAsync(title, rootDir, isMulti: true, filter, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return Array.Empty<string>();
             }
             finally
             {

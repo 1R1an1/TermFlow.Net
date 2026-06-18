@@ -21,6 +21,7 @@ public static class Engine
 
     private const int STD_OUTPUT_HANDLE = -11;
     private const uint ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004;
+    private static bool isFullScreen = false;
 
     public static void Setup()
     {
@@ -50,7 +51,11 @@ public static class Engine
         // \x1b[?25l    -> Ocultar el cursor físico de la terminal
         // \x1b[?1002h -> Activar reporte de clicks y rueda de mouse
         // \x1b[?1006h -> Activar formato extendido SGR para tracking de mouse preciso
-        Console.Write("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[?1002h\x1b[?1006h");
+        if (!isFullScreen)
+        {
+            Console.Write("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[?1002h\x1b[?1006h");
+            isFullScreen = true;
+        }
     }
 
     public static void ExitFullScreen()
@@ -59,6 +64,10 @@ public static class Engine
         // \x1b[?1002l\x1b[?1006l -> Apagar tracking de mouse
         // \x1b[?25h             -> Mostrar de nuevo el cursor nativo
         // \x1b[?1049l            -> Volver al main screen buffer restaurando todo como estaba antes
-        Console.Write("\x1b[?1002l\x1b[?1006l\x1b[?25h\x1b[?1049l");
+        if (isFullScreen)
+        {
+            Console.Write("\x1b[?1002l\x1b[?1006l\x1b[?25h\x1b[?1049l");
+            isFullScreen = false;
+        }
     }
 }

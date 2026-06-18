@@ -84,6 +84,10 @@ namespace ConsoleUtils
 
                 return -1;
             }
+            catch (OperationCanceledException)
+            {
+                return -1;
+            }
             finally
             {
                 Engine.ExitFullScreen();
@@ -172,6 +176,10 @@ namespace ConsoleUtils
                     await Task.Delay(15, token);
                 }
 
+                return Array.Empty<int>();
+            }
+            catch (OperationCanceledException)
+            {
                 return Array.Empty<int>();
             }
             finally
