@@ -3,7 +3,8 @@ namespace ConsoleUtils;
 public class ConsoleTheme
 {
     // Colores ANSI Estándar (Modificables)
-    public string Primary { get; set; } = "\x1b[1;35m";    // Morado/Magenta Brillante
+    public string Title { get; set; } = "\x1b[1;35m";       // Morado/Magenta Brillante
+    public string Primary => Bold;
     public string Success { get; set; } = "\x1b[0;32m";    // Verde
     public string Warning { get; set; } = "\x1b[1;33m";    // Amarillo
     public string Error { get; set; } = "\x1b[0;31m";      // Rojo

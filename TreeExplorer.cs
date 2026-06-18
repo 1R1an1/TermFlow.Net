@@ -296,7 +296,7 @@ namespace ConsoleUtils
             buffer.Clear().Append("\x1b[H");
 
             // Cabeceras
-            buffer.Append($"  {theme.Primary}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
+            buffer.Append($"  {theme.Title}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
             buffer.Append($"  {theme.Dim}{new string(theme.BorderHorizontal, Math.Max(20, title.Length))}{theme.Reset}\x1b[K\n");
             buffer.Append($"  Ruta: {theme.Dim}{currentDir}{theme.Reset}\x1b[K\n");
 

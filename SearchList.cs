@@ -251,7 +251,7 @@ namespace ConsoleUtils
             buffer.Append("\x1b[H");
 
             // Cabecera
-            buffer.Append($"  {theme.Primary}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
+            buffer.Append($"  {theme.Title}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
             buffer.Append($"  {theme.Dim}{new string(theme.BorderHorizontal, Math.Max(20, title.Length))}{theme.Reset}\x1b[K\n");
 
             // Input de búsqueda predictiva (Ya no tiene el \n extra abajo, se une directo al indicador)

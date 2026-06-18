@@ -197,7 +197,7 @@ namespace ConsoleUtils
             buffer.Append("\x1b[H");
 
             // Cabecera optimizada: quitamos el \n extra. Agregamos \x1b[K para limpiar fantasmas.
-            buffer.Append($"  {theme.Primary}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
+            buffer.Append($"  {theme.Title}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
             buffer.Append($"  {theme.Dim}{new string(theme.BorderHorizontal, Math.Max(20, title.Length))}{theme.Reset}\x1b[K\n");
 
             int end = Math.Min(items.Length, scroll + visibleRows);

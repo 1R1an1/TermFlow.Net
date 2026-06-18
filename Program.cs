@@ -43,7 +43,7 @@ class Program
         TextViewer.WriteHeader("Iniciando herramientas de automatización de dotfiles... - ");
 
         // 1. El input ahora es sutil, de una sola línea y sin títulos raros
-        string user = await TextInput.ReadStringAsync(">>> ", Engine.Theme.Reset, cts.Token);
+        string user = await TextInput.ReadStringAsync(">>> ", cts.Token);
         if (user == null) { TextViewer.Error("Operación cancelada."); return; }
 
         // 2. El spinner corre discreto en su propia línea
@@ -57,7 +57,7 @@ class Program
 
         // 3. La barra de progreso avanza en su lugar y al terminar se queda fija al 100%
         await ProgressBarDisplay.RunAsync(
-            $"{Engine.Theme.Reset}{Engine.Theme.Bold}Sincronizando archivos con tu repositorio local{Engine.Theme.Reset}", 223575856,
+            $"Sincronizando archivos con tu repositorio local", 223575856,
             async (task) =>
             {
                 for (int i = 1; i <= 223575856; i += new Random().Next((1024 * 1024 * 10) / 10, (20 * 1024 * 1024) / 10))

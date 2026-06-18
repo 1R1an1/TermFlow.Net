@@ -40,7 +40,7 @@ namespace ConsoleUtils
         public static void WriteHeader(string title)
         {
             var theme = Engine.Theme;
-            Console.WriteLine($"{theme.Primary}{theme.Bold}{title}{theme.Reset}");
+            Console.WriteLine($"{theme.Title}{theme.Bold}{title}{theme.Reset}");
             Console.WriteLine($"{theme.Dim}{new string(theme.BorderHorizontal, title.Length)}{theme.Reset}");
         }
     }
