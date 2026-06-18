@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,7 +9,6 @@ namespace ConsoleUtils
     public interface IProgressTask
     {
         long Value { get; set; }
-        double Speed { get; set; } // En bytes por segundo
     }
 
     public static class ProgressBarDisplay
@@ -22,15 +22,9 @@ namespace ConsoleUtils
                 get => Interlocked.Read(ref _value);
                 set => Interlocked.Exchange(ref _value, value);
             }
-            public double Speed { get; set; }
         }
 
-        public static async Task RunAsync(
-            string description,
-            long maxValue,
-            Func<IProgressTask, Task> workerTask,
-            int? fixedBarWidth = null,
-            CancellationToken token = default)
+        public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, int? fixedBarWidth = null, bool showSpeed = true, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             var taskState = new ProgressTaskImpl();
@@ -38,6 +32,7 @@ namespace ConsoleUtils
 
             Console.CursorVisible = false;
 
+            var stopwatch = Stopwatch.StartNew();
             Task renderTask = Task.Run(async () =>
             {
                 try
@@ -47,7 +42,10 @@ namespace ConsoleUtils
                     while (!internalCts.Token.IsCancellationRequested)
                     {
                         long currentVal = Interlocked.Read(ref taskState._value);
-                        double currentSpeed = taskState.Speed;
+
+                        // Cálculo automático de velocidad (unidades por segundo)
+                        double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
+                        double currentSpeed = elapsedSeconds > 0.1 ? (double)currentVal / elapsedSeconds : 0;
 
                         double percentage = maxValue > 0 ? (double)currentVal / maxValue : 0;
                         if (percentage > 1.0) percentage = 1.0;
@@ -58,15 +56,15 @@ namespace ConsoleUtils
                         // 2. Columna Porcentaje
                         string colPercent = $" {(int)(percentage * 100)}% ";
 
-                        // 3. Columna Velocidad (Decimal Base: 1 KB = 1000 Bytes)
-                        string colSpeed = $" {FormatDecimalSpeed(currentSpeed)} ";
+                        // 3. Columna Velocidad (Condicional)
+                        string colSpeed = showSpeed ? $" {FormatDecimalSpeed(currentSpeed)} " : string.Empty;
 
                         // 4. Columna Tiempo Restante (ETA)
                         string colEta = $" [{FormatEta(currentVal, maxValue, currentSpeed)}] ";
 
-                        // Calcular espacio disponible para la barra de progreso
-                        int metaWidth = colDesc.Length + colPercent.Length + colSpeed.Length + colEta.Length + 4; // Márgenes de escape aproximados
-                        int barWidth = fixedBarWidth ?? Math.Max(10, Console.WindowWidth - metaWidth - 10);
+                        // Calcular espacio disponible para la barra de progreso de forma dinámica
+                        int metaWidth = GetVisualLength(colDesc) + GetVisualLength(colPercent) + GetVisualLength(colSpeed) + GetVisualLength(colEta) + 2;
+                        int barWidth = fixedBarWidth ?? Math.Max(10, Console.WindowWidth - metaWidth);
 
                         int filledBlocks = (int)Math.Round(percentage * barWidth);
                         int emptyBlocks = barWidth - filledBlocks;
@@ -107,7 +105,7 @@ namespace ConsoleUtils
 
                 // Dibujar estado final al 100% clavado e inline
                 int width = fixedBarWidth ?? 20;
-                Console.Write($"\r{theme.Success}{theme.Checked} {description} [{new string('█', width)}] 100% {theme.Dim}(Completado){theme.Reset}\x1b[K\n");
+                Console.Write($"\r{theme.Success}{theme.Checked} {description} {theme.Success}[{new string('█', width)}] 100% {theme.Dim}(Completado){theme.Reset}\x1b[K\n");
                 Console.CursorVisible = true;
             }
         }
@@ -134,5 +132,11 @@ namespace ConsoleUtils
             TimeSpan time = TimeSpan.FromSeconds(secondsLeft);
             return $"{((int)time.TotalHours):D2}:{time.Minutes:D2}:{time.Seconds:D2}";
         }
+
+        private static int GetVisualLength(string text)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(text, @"\x1b\[[^m]*m", "").Length;
+        }
+
     }
 }

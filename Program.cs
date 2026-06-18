@@ -57,16 +57,16 @@ class Program
 
         // 3. La barra de progreso avanza en su lugar y al terminar se queda fija al 100%
         await ProgressBarDisplay.RunAsync(
-            "Sincronizando archivos con tu repositorio local", 100,
+            $"{Engine.Theme.Reset}{Engine.Theme.Bold}Sincronizando archivos con tu repositorio local{Engine.Theme.Reset}", 223575856,
             async (task) =>
             {
-                for (int i = 1; i <= 100; i++)
+                for (int i = 1; i <= 223575856; i += new Random().Next((1024 * 1024 * 10) / 10, (20 * 1024 * 1024) / 10))
                 {
                     await Task.Delay(100);
                     task.Value = i;
                     // progress.Report(i / 100.0);
                 }
-            }
+            }, showSpeed: true
         );
 
         // El flujo de texto plano sigue perfectamente limpio hacia abajo
