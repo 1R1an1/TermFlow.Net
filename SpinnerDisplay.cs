@@ -8,7 +8,7 @@ namespace ConsoleUtils
     {
         public static readonly string[] DefaultFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
 
-        public static async Task RunAsync(string description, Func<CancellationToken, Task> workerTask, string[] customFrames = null, string completionText = "(Completado)", CancellationToken token = default)
+        public static async Task<string> RunAsync(string description, Func<CancellationToken, Task> workerTask, string[] customFrames = null, string completionText = "(Completado)", CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             string[] frames = customFrames ?? DefaultFrames;
@@ -49,9 +49,9 @@ namespace ConsoleUtils
                 await renderTask;
 
                 // Render final de éxito inline
-                Console.Write($"\r{theme.Success}{theme.Checked}{theme.Reset} {description} {theme.Dim}{completionText}{theme.Reset}\x1b[K\n");
                 Console.CursorVisible = true;
             }
+            return $"{description} {theme.Dim}{completionText}{theme.Reset}";
         }
     }
 }

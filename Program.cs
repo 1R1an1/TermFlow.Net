@@ -33,6 +33,10 @@ class Program
         // Texto plano normal impreso a la vieja usanza
         var cts = new CancellationTokenSource();
 
+        TextViewer.Info(await SpinnerDisplay.RunAsync(
+                    "Verificando credenciales SSH en el servidor remoto",
+                    async (a) => await Task.Delay(2000)
+                ));
         LiveConsole liveChat = new();
         // Podés inyectar logs desde tareas en segundo plano libremente
         _ = Task.Run(async () =>
