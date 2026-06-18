@@ -7,30 +7,30 @@ namespace ConsoleUtils
         public static void Info(string msg)
         {
             var theme = Engine.Theme;
-            Console.WriteLine($"{theme.Cyan}{theme.InfoBullet}{theme.Reset} {msg}");
+            Console.WriteLine($"\r\x1b[K{theme.Cyan}{theme.InfoBullet}{theme.Reset} {msg}");
         }
 
         public static void Success(string msg)
         {
             var theme = Engine.Theme;
-            Console.WriteLine($"{theme.Success}{theme.Checked}{theme.Reset} {msg}");
+            Console.WriteLine($"\r\x1b[K{theme.Success}{theme.Checked}{theme.Reset} {msg}");
         }
 
         public static void Warn(string msg)
         {
             var theme = Engine.Theme;
-            Console.WriteLine($"{theme.Warning}!{theme.Reset} {msg}");
+            Console.WriteLine($"\r\x1b[K{theme.Warning}!{theme.Reset} {msg}");
         }
 
         public static void Error(string msg)
         {
             var theme = Engine.Theme;
-            Console.WriteLine($"{theme.Error}✘{theme.Reset} {msg}");
+            Console.WriteLine($"\r\x1b[K{theme.Error}✘{theme.Reset} {msg}");
         }
 
         public static void WritePlain(string msg)
         {
-            Console.WriteLine(msg);
+            Console.WriteLine("\r\x1b[K" + msg);
         }
 
         /// <summary>
