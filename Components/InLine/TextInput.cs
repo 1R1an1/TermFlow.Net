@@ -70,5 +70,26 @@ namespace TermFlow.Components.InLine
             // Si salimos por cancelación del token, devolvemos una cadena vacía
             return null;
         }
+
+        public static async Task<bool> AskAsync(string prompt)
+        {
+            var theme = Engine.Theme;
+            Console.Write($"{theme.Primary}{prompt} {theme.Cyan}[y/n]{theme.Reset} ");
+
+            while (true)
+            {
+                var key = Console.ReadKey(intercept: true).Key;
+                if (key == ConsoleKey.Y)
+                {
+                    Console.WriteLine("y");
+                    return true;
+                }
+                if (key == ConsoleKey.N || key == ConsoleKey.Escape)
+                {
+                    Console.WriteLine("n");
+                    return false;
+                }
+            }
+        }
     }
 }
