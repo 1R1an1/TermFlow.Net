@@ -210,7 +210,6 @@ namespace ConsoleUtils
             lock (_stateLock)
             {
                 currentInput = _inputBuffer;
-                currentScroll = _scrollOffset;
 
                 // FIX: Cálculo elástico de filas soportando múltiples líneas reales (\n)
                 int inputRows = 0;
@@ -224,6 +223,23 @@ namespace ConsoleUtils
                 }
 
                 int logRowsAvailable = Math.Max(1, height - inputRows - 1);
+
+                // =================================================================
+                // NUEVO: Limitar el scroll al tope máximo de líneas reales en el historial
+                int totalLogLines = 0;
+                foreach (var log in _logs)
+                {
+                    totalLogLines += WrapText(log, width).Count;
+                }
+
+                int maxScroll = Math.Max(0, totalLogLines - logRowsAvailable);
+                if (_scrollOffset > maxScroll)
+                {
+                    _scrollOffset = maxScroll;
+                }
+                // =================================================================
+
+                currentScroll = _scrollOffset;
                 visibleLines = GetVisibleLogLines(width, logRowsAvailable, currentScroll);
             }
 
