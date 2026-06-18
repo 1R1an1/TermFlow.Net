@@ -88,8 +88,7 @@ namespace ConsoleUtils
             int scroll = 0;
             StringBuilder buffer = new StringBuilder(2048);
 
-            int lastHeight = Console.WindowHeight;
-            int lastWidth = Console.WindowWidth;
+            ScrollState layout = new ScrollState();
             bool shouldRender = true;
 
             HashSet<int> selectedMap = new HashSet<int>();
@@ -103,22 +102,15 @@ namespace ConsoleUtils
 
             while (!token.IsCancellationRequested)
             {
-                if (Console.WindowHeight != lastHeight || Console.WindowWidth != lastWidth)
+                if (layout.Update(cursor, items.Length, ReservedRows))
                 {
-                    lastHeight = Console.WindowHeight;
-                    lastWidth = Console.WindowWidth;
                     shouldRender = true;
                     Console.Write("\x1b[2J");
                 }
-
-                int visibleRows = Math.Max(1, Console.WindowHeight - ReservedRows);
-
-                if (cursor < scroll) { scroll = cursor; shouldRender = true; }
-                if (cursor >= scroll + visibleRows) { scroll = cursor - visibleRows + 1; shouldRender = true; }
-
+                cursor = layout.Cursor;
                 if (shouldRender)
                 {
-                    RenderMenu(buffer, title, items, cursor, scroll, visibleRows, selectedMap);
+                    RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap);
                     shouldRender = false;
                 }
 

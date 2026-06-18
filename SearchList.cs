@@ -21,22 +21,13 @@ namespace ConsoleUtils
             StringBuilder query = new StringBuilder();
             StringBuilder buffer = new StringBuilder(2048);
 
-            int lastHeight = Console.WindowHeight;
-            int lastWidth = Console.WindowWidth;
+            ScrollState layout = new ScrollState();
             bool shouldRender = true;
 
             var filtered = new List<(string Text, int OriginalIndex)>();
 
             while (!token.IsCancellationRequested)
             {
-                if (Console.WindowHeight != lastHeight || Console.WindowWidth != lastWidth)
-                {
-                    lastHeight = Console.WindowHeight;
-                    lastWidth = Console.WindowWidth;
-                    shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
-
                 filtered.Clear();
                 string currentQuery = query.ToString();
                 for (int i = 0; i < items.Length; i++)
@@ -47,17 +38,15 @@ namespace ConsoleUtils
                     }
                 }
 
-                if (filtered.Count > 0 && cursor >= filtered.Count) cursor = filtered.Count - 1;
-                if (filtered.Count == 0) cursor = 0;
-
-                int visibleRows = Math.Max(1, Console.WindowHeight - ReservedRows);
-
-                if (cursor < scroll) { scroll = cursor; shouldRender = true; }
-                if (cursor >= scroll + visibleRows) { scroll = cursor - visibleRows + 1; shouldRender = true; }
-
+                if (layout.Update(cursor, filtered.Count, ReservedRows))
+                {
+                    shouldRender = true;
+                    Console.Write("\x1b[2J");
+                }
+                cursor = layout.Cursor;
                 if (shouldRender)
                 {
-                    RenderSearch(buffer, title, query.ToString(), filtered, cursor, scroll, visibleRows, selectedMap: null);
+                    RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
                     shouldRender = false;
                 }
 
@@ -128,8 +117,7 @@ namespace ConsoleUtils
             StringBuilder query = new StringBuilder();
             StringBuilder buffer = new StringBuilder(2048);
 
-            int lastHeight = Console.WindowHeight;
-            int lastWidth = Console.WindowWidth;
+            ScrollState layout = new ScrollState();
             bool shouldRender = true;
 
             // Inicializar el mapa de seleccionados con los índices originales correspondientes
@@ -146,14 +134,6 @@ namespace ConsoleUtils
 
             while (!token.IsCancellationRequested)
             {
-                if (Console.WindowHeight != lastHeight || Console.WindowWidth != lastWidth)
-                {
-                    lastHeight = Console.WindowHeight;
-                    lastWidth = Console.WindowWidth;
-                    shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
-
                 filtered.Clear();
                 string currentQuery = query.ToString();
                 for (int i = 0; i < items.Length; i++)
@@ -164,17 +144,15 @@ namespace ConsoleUtils
                     }
                 }
 
-                if (filtered.Count > 0 && cursor >= filtered.Count) cursor = filtered.Count - 1;
-                if (filtered.Count == 0) cursor = 0;
-
-                int visibleRows = Math.Max(1, Console.WindowHeight - ReservedRows);
-
-                if (cursor < scroll) { scroll = cursor; shouldRender = true; }
-                if (cursor >= scroll + visibleRows) { scroll = cursor - visibleRows + 1; shouldRender = true; }
+                if (layout.Update(cursor, filtered.Count, ReservedRows))
+                {
+                    shouldRender = true;
+                    Console.Write("\x1b[2J");
+                }
 
                 if (shouldRender)
                 {
-                    RenderSearch(buffer, title, query.ToString(), filtered, cursor, scroll, visibleRows, selectedMap);
+                    RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
                     shouldRender = false;
                 }
 
