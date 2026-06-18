@@ -4,7 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ConsoleUtils
+namespace TermFlow
 {
     public class LiveConsole
     {
@@ -13,6 +13,7 @@ namespace ConsoleUtils
         private readonly int _maxLogs;
 
         private string _inputBuffer = "";
+        private bool _hasNewLogsBelow = false;
         private int _scrollOffset = 0; // 0 = Enganchado al fondo (Sticky)
 
         // El semáforo maestro que despierta a la pantalla solo cuando es necesario
@@ -40,6 +41,8 @@ namespace ConsoleUtils
                     try { width = Console.WindowWidth; } catch { }
                     int newLines = WrapText(message, width).Count;
                     _scrollOffset += newLines;
+
+                    _hasNewLogsBelow = true;
                 }
 
                 if (_logs.Count > _maxLogs)
@@ -224,7 +227,6 @@ namespace ConsoleUtils
 
                 int logRowsAvailable = Math.Max(1, height - inputRows - 1);
 
-                // =================================================================
                 // NUEVO: Limitar el scroll al tope máximo de líneas reales en el historial
                 int totalLogLines = 0;
                 foreach (var log in _logs)
@@ -237,7 +239,12 @@ namespace ConsoleUtils
                 {
                     _scrollOffset = maxScroll;
                 }
-                // =================================================================
+
+                // Si bajó al presente, apagamos la alerta ===
+                if (_scrollOffset == 0)
+                {
+                    _hasNewLogsBelow = false;
+                }
 
                 currentScroll = _scrollOffset;
                 visibleLines = GetVisibleLogLines(width, logRowsAvailable, currentScroll);
@@ -249,8 +256,44 @@ namespace ConsoleUtils
                 buffer.Append(line).Append("\x1b[K\n");
             }
 
-            // 2. Dibujamos la barra divisoria
-            buffer.Append($"{theme.Dim}{new string(theme.BorderHorizontal, width)}{theme.Reset}\x1b[K\n");
+            // 2. Dibujamos la barra divisoria inteligente corregida
+            string dividerLine = new string(theme.BorderHorizontal, width);
+
+            if (currentScroll > 0 && _hasNewLogsBelow)
+            {
+                // ALERTA: Hay mensajes nuevos reales sin leer abajo
+                string alertText = " [ ↓ MENSAJES NUEVOS ABAJO ] ";
+                if (width > alertText.Length + 6)
+                {
+                    int sideLength = (width - alertText.Length) / 2;
+                    string sideBar = new string(theme.BorderHorizontal, sideLength);
+                    buffer.Append($"{theme.Dim}{sideBar}{theme.Warning}{theme.Bold}{alertText}{theme.Reset}{theme.Dim}{new string(theme.BorderHorizontal, width - sideLength - alertText.Length)}{theme.Reset}\x1b[K\n");
+                }
+                else
+                {
+                    buffer.Append($"{theme.Warning}{dividerLine}{theme.Reset}\x1b[K\n");
+                }
+            }
+            else if (currentScroll > 0)
+            {
+                // Modo lectura tranquilo: Estás arriba, pero nadie escribió nada nuevo
+                string historyText = $" [ MODO HISTORIAL: -{currentScroll} LÍNEAS ] ";
+                if (width > historyText.Length + 6)
+                {
+                    int sideLength = (width - historyText.Length) / 2;
+                    string sideBar = new string(theme.BorderHorizontal, sideLength);
+                    buffer.Append($"{theme.Dim}{sideBar}{historyText}{new string(theme.BorderHorizontal, width - sideLength - historyText.Length)}{theme.Reset}\x1b[K\n");
+                }
+                else
+                {
+                    buffer.Append($"{theme.Dim}{dividerLine}{theme.Reset}\x1b[K\n");
+                }
+            }
+            else
+            {
+                // Barra normal opaca (Estás en el presente)
+                buffer.Append($"{theme.Dim}{dividerLine}{theme.Reset}\x1b[K\n");
+            }
 
             // 3. FIX: Dibujamos el prompt y el bloque multilínea del input limpiando renglón por renglón
             buffer.Append($"{theme.Primary}{theme.Bold}{prompt}{theme.Reset}");

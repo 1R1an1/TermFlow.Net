@@ -2,7 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ConsoleUtils;
+namespace TermFlow;
 
 class Program
 {
@@ -50,7 +50,7 @@ class Program
 
         // Iniciás la interfaz bloqueando el hilo principal
         await liveChat.RunAsync(
-            prompt: ">>> ",
+            prompt: $"{Engine.Theme.Dim}>>>{Engine.Theme.Reset} ",
             onInputSubmitted: async (mensaje) =>
             {
                 // 1. Lo agregas a tu propia pantalla
