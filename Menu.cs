@@ -85,7 +85,6 @@ namespace ConsoleUtils
         public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
             int cursor = 0;
-            int scroll = 0;
             StringBuilder buffer = new StringBuilder(2048);
 
             ScrollState layout = new ScrollState();

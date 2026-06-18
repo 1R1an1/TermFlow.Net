@@ -41,7 +41,6 @@ namespace ConsoleUtils
         {
             string currentDir = Path.GetFullPath(rootDir);
             int cursor = 0;
-            int scroll = 0;
             StringBuilder buffer = new StringBuilder(4096);
 
             ScrollState layout = new ScrollState();
@@ -109,7 +108,6 @@ namespace ConsoleUtils
                                     currentDir = selectedPath;
                                     entries = FetchAndSortEntries(currentDir);
                                     cursor = 0;
-                                    scroll = 0;
                                 }
                                 else if (!isMulti)
                                 {
@@ -126,7 +124,6 @@ namespace ConsoleUtils
                                 currentDir = parent.FullName;
                                 entries = FetchAndSortEntries(currentDir);
                                 cursor = 0;
-                                scroll = 0;
                             }
                         }
                         // Gestión de Marcado (Espacio)

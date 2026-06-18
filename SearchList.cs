@@ -17,7 +17,6 @@ namespace ConsoleUtils
         public static async Task<int> FilterOneAsync(string title, string[] items, CancellationToken token = default)
         {
             int cursor = 0;
-            int scroll = 0;
             StringBuilder query = new StringBuilder();
             StringBuilder buffer = new StringBuilder(2048);
 
@@ -81,14 +80,12 @@ namespace ConsoleUtils
                             {
                                 query.Remove(query.Length - 1, 1);
                                 cursor = 0;
-                                scroll = 0;
                             }
                         }
                         else if (!char.IsControl(key.KeyChar))
                         {
                             query.Append(key.KeyChar);
                             cursor = 0;
-                            scroll = 0;
                         }
                     }
                     else if (inputEvent.Type == InputEventType.ScrollUp)
@@ -113,7 +110,6 @@ namespace ConsoleUtils
         public static async Task<int[]> FilterMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
             int cursor = 0;
-            int scroll = 0;
             StringBuilder query = new StringBuilder();
             StringBuilder buffer = new StringBuilder(2048);
 
@@ -198,14 +194,12 @@ namespace ConsoleUtils
                             {
                                 query.Remove(query.Length - 1, 1);
                                 cursor = 0;
-                                scroll = 0;
                             }
                         }
                         else if (!char.IsControl(key.KeyChar))
                         {
                             query.Append(key.KeyChar);
                             cursor = 0;
-                            scroll = 0;
                         }
                     }
                     else if (inputEvent.Type == InputEventType.ScrollUp)
