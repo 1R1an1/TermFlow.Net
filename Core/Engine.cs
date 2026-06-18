@@ -44,7 +44,7 @@ public static class Engine
         }
     }
 
-    public static void EnterFullScreen()
+    public static void EnterFullScreen(bool captureMouse = true)
     {
         // \x1b[?1049h -> Activar alternate screen buffer (Lienzo limpio sin alterar la consola previa)
         // \x1b[2J     -> Limpiar pantalla completa
@@ -53,7 +53,7 @@ public static class Engine
         // \x1b[?1006h -> Activar formato extendido SGR para tracking de mouse preciso
         if (!isFullScreen)
         {
-            Console.Write("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[?1002h\x1b[?1006h");
+            Console.Write("\x1b[?1049h\x1b[2J\x1b[?25l" + (captureMouse ? "\x1b[?1002h\x1b[?1006h" : ""));
             isFullScreen = true;
         }
     }

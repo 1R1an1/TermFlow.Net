@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Components.FullScreen;
@@ -35,6 +36,17 @@ class Program
         // 1. Probamos el Input Box para pedir un dato común
         // Texto plano normal impreso a la vieja usanza
         var cts = new CancellationTokenSource();
+
+        // 2. Probar la Tabla Fullscreen
+        string[] headers = { "ID", "Nombre Servidor", "IP Puerto", "Estado" };
+        var rows = new List<string[]>
+    {
+        new[] { "001", "ControlHub.PCServer", "127.0.0.1:8080", "ONLINE" },
+        new[] { "002", "ControlHub.PCCommon", "127.0.0.1:8081", "STANDBY" },
+        new[] { "003", "Backup_Node", "192.168.1.50:9000", "OFFLINE" }
+    };
+
+        TableView.Show(headers, rows);
 
         TextViewer.Info(await SpinnerDisplay.RunAsync(
                     "Verificando credenciales SSH en el servidor remoto",
