@@ -16,92 +16,100 @@ namespace ConsoleUtils
         /// </summary>
         public static async Task<int> FilterOneAsync(string title, string[] items, CancellationToken token = default)
         {
-            int cursor = 0;
-            StringBuilder query = new StringBuilder();
-            StringBuilder buffer = new StringBuilder(2048);
-
-            ScrollState layout = new ScrollState();
-            bool shouldRender = true;
-
-            var filtered = new List<(string Text, int OriginalIndex)>();
-
-            while (!token.IsCancellationRequested)
+            Engine.EnterFullScreen();
+            try
             {
-                filtered.Clear();
-                string currentQuery = query.ToString();
-                for (int i = 0; i < items.Length; i++)
+                int cursor = 0;
+                StringBuilder query = new StringBuilder();
+                StringBuilder buffer = new StringBuilder(2048);
+
+                ScrollState layout = new ScrollState();
+                bool shouldRender = true;
+
+                var filtered = new List<(string Text, int OriginalIndex)>();
+
+                while (!token.IsCancellationRequested)
                 {
-                    if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
+                    filtered.Clear();
+                    string currentQuery = query.ToString();
+                    for (int i = 0; i < items.Length; i++)
                     {
-                        filtered.Add((items[i], i));
+                        if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
+                        {
+                            filtered.Add((items[i], i));
+                        }
                     }
-                }
 
-                if (layout.Update(cursor, filtered.Count, ReservedRows))
-                {
-                    shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
-                cursor = layout.Cursor;
-                if (shouldRender)
-                {
-                    RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
-                    shouldRender = false;
-                }
-
-                var inputEvent = InputReader.ReadInput();
-
-                if (inputEvent.Type != InputEventType.None)
-                {
-                    shouldRender = true;
-
-                    if (inputEvent.Type == InputEventType.Key)
+                    if (layout.Update(cursor, filtered.Count, ReservedRows))
                     {
-                        var key = inputEvent.KeyInfo;
+                        shouldRender = true;
+                        Console.Write("\x1b[2J");
+                    }
+                    cursor = layout.Cursor;
+                    if (shouldRender)
+                    {
+                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
+                        shouldRender = false;
+                    }
 
-                        if (key.Key == ConsoleKey.Escape) return -1;
+                    var inputEvent = InputReader.ReadInput();
 
-                        if (key.Key == ConsoleKey.Enter)
-                        {
-                            return filtered.Count > 0 ? filtered[cursor].OriginalIndex : -1;
-                        }
+                    if (inputEvent.Type != InputEventType.None)
+                    {
+                        shouldRender = true;
 
-                        if (key.Key == ConsoleKey.UpArrow)
+                        if (inputEvent.Type == InputEventType.Key)
                         {
-                            if (cursor > 0) cursor--;
-                        }
-                        else if (key.Key == ConsoleKey.DownArrow)
-                        {
-                            if (cursor < filtered.Count - 1) cursor++;
-                        }
-                        else if (key.Key == ConsoleKey.Backspace)
-                        {
-                            if (query.Length > 0)
+                            var key = inputEvent.KeyInfo;
+
+                            if (key.Key == ConsoleKey.Escape) return -1;
+
+                            if (key.Key == ConsoleKey.Enter)
                             {
-                                query.Remove(query.Length - 1, 1);
+                                return filtered.Count > 0 ? filtered[cursor].OriginalIndex : -1;
+                            }
+
+                            if (key.Key == ConsoleKey.UpArrow)
+                            {
+                                if (cursor > 0) cursor--;
+                            }
+                            else if (key.Key == ConsoleKey.DownArrow)
+                            {
+                                if (cursor < filtered.Count - 1) cursor++;
+                            }
+                            else if (key.Key == ConsoleKey.Backspace)
+                            {
+                                if (query.Length > 0)
+                                {
+                                    query.Remove(query.Length - 1, 1);
+                                    cursor = 0;
+                                }
+                            }
+                            else if (!char.IsControl(key.KeyChar))
+                            {
+                                query.Append(key.KeyChar);
                                 cursor = 0;
                             }
                         }
-                        else if (!char.IsControl(key.KeyChar))
+                        else if (inputEvent.Type == InputEventType.ScrollUp)
                         {
-                            query.Append(key.KeyChar);
-                            cursor = 0;
+                            if (cursor > 0) cursor--;
+                        }
+                        else if (inputEvent.Type == InputEventType.ScrollDown)
+                        {
+                            if (cursor < filtered.Count - 1) cursor++;
                         }
                     }
-                    else if (inputEvent.Type == InputEventType.ScrollUp)
-                    {
-                        if (cursor > 0) cursor--;
-                    }
-                    else if (inputEvent.Type == InputEventType.ScrollDown)
-                    {
-                        if (cursor < filtered.Count - 1) cursor++;
-                    }
+
+                    await Task.Delay(15, token);
                 }
 
-                await Task.Delay(15, token);
+                return -1;
             }
-
-            return -1;
+            finally
+            {
+                Engine.ExitFullScreen();
+            }
         }
 
         /// <summary>
@@ -109,113 +117,121 @@ namespace ConsoleUtils
         /// </summary>
         public static async Task<int[]> FilterMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
-            int cursor = 0;
-            StringBuilder query = new StringBuilder();
-            StringBuilder buffer = new StringBuilder(2048);
-
-            ScrollState layout = new ScrollState();
-            bool shouldRender = true;
-
-            // Inicializar el mapa de seleccionados con los índices originales correspondientes
-            HashSet<int> selectedMap = new HashSet<int>();
-            if (preselected != null)
+            Engine.EnterFullScreen();
+            try
             {
-                for (int i = 0; i < preselected.Length; i++)
-                {
-                    if (i < items.Length && preselected[i]) selectedMap.Add(i);
-                }
-            }
+                int cursor = 0;
+                StringBuilder query = new StringBuilder();
+                StringBuilder buffer = new StringBuilder(2048);
 
-            var filtered = new List<(string Text, int OriginalIndex)>();
+                ScrollState layout = new ScrollState();
+                bool shouldRender = true;
 
-            while (!token.IsCancellationRequested)
-            {
-                filtered.Clear();
-                string currentQuery = query.ToString();
-                for (int i = 0; i < items.Length; i++)
+                // Inicializar el mapa de seleccionados con los índices originales correspondientes
+                HashSet<int> selectedMap = new HashSet<int>();
+                if (preselected != null)
                 {
-                    if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
+                    for (int i = 0; i < preselected.Length; i++)
                     {
-                        filtered.Add((items[i], i));
+                        if (i < items.Length && preselected[i]) selectedMap.Add(i);
                     }
                 }
 
-                if (layout.Update(cursor, filtered.Count, ReservedRows))
+                var filtered = new List<(string Text, int OriginalIndex)>();
+
+                while (!token.IsCancellationRequested)
                 {
-                    shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
-
-                if (shouldRender)
-                {
-                    RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
-                    shouldRender = false;
-                }
-
-                var inputEvent = InputReader.ReadInput();
-
-                if (inputEvent.Type != InputEventType.None)
-                {
-                    shouldRender = true;
-
-                    if (inputEvent.Type == InputEventType.Key)
+                    filtered.Clear();
+                    string currentQuery = query.ToString();
+                    for (int i = 0; i < items.Length; i++)
                     {
-                        var key = inputEvent.KeyInfo;
+                        if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
+                        {
+                            filtered.Add((items[i], i));
+                        }
+                    }
 
-                        if (key.Key == ConsoleKey.Escape) return Array.Empty<int>();
+                    if (layout.Update(cursor, filtered.Count, ReservedRows))
+                    {
+                        shouldRender = true;
+                        Console.Write("\x1b[2J");
+                    }
 
-                        // Confirmar selección (En modo buscador 'c' escribe, por lo tanto Enter es el único confirmador)
-                        if (key.Key == ConsoleKey.Enter)
-                        {
-                            int[] result = new int[selectedMap.Count];
-                            selectedMap.CopyTo(result);
-                            Array.Sort(result);
-                            return result;
-                        }
+                    if (shouldRender)
+                    {
+                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
+                        shouldRender = false;
+                    }
 
-                        // Marcar / Desmarcar con la Barra Espaciadora usando el índice original
-                        if (key.Key == ConsoleKey.Spacebar && filtered.Count > 0)
+                    var inputEvent = InputReader.ReadInput();
+
+                    if (inputEvent.Type != InputEventType.None)
+                    {
+                        shouldRender = true;
+
+                        if (inputEvent.Type == InputEventType.Key)
                         {
-                            int originalIdx = filtered[cursor].OriginalIndex;
-                            if (selectedMap.Contains(originalIdx)) selectedMap.Remove(originalIdx);
-                            else selectedMap.Add(originalIdx);
-                        }
-                        else if (key.Key == ConsoleKey.UpArrow)
-                        {
-                            if (cursor > 0) cursor--;
-                        }
-                        else if (key.Key == ConsoleKey.DownArrow)
-                        {
-                            if (cursor < filtered.Count - 1) cursor++;
-                        }
-                        else if (key.Key == ConsoleKey.Backspace)
-                        {
-                            if (query.Length > 0)
+                            var key = inputEvent.KeyInfo;
+
+                            if (key.Key == ConsoleKey.Escape) return Array.Empty<int>();
+
+                            // Confirmar selección (En modo buscador 'c' escribe, por lo tanto Enter es el único confirmador)
+                            if (key.Key == ConsoleKey.Enter)
                             {
-                                query.Remove(query.Length - 1, 1);
+                                int[] result = new int[selectedMap.Count];
+                                selectedMap.CopyTo(result);
+                                Array.Sort(result);
+                                return result;
+                            }
+
+                            // Marcar / Desmarcar con la Barra Espaciadora usando el índice original
+                            if (key.Key == ConsoleKey.Spacebar && filtered.Count > 0)
+                            {
+                                int originalIdx = filtered[cursor].OriginalIndex;
+                                if (selectedMap.Contains(originalIdx)) selectedMap.Remove(originalIdx);
+                                else selectedMap.Add(originalIdx);
+                            }
+                            else if (key.Key == ConsoleKey.UpArrow)
+                            {
+                                if (cursor > 0) cursor--;
+                            }
+                            else if (key.Key == ConsoleKey.DownArrow)
+                            {
+                                if (cursor < filtered.Count - 1) cursor++;
+                            }
+                            else if (key.Key == ConsoleKey.Backspace)
+                            {
+                                if (query.Length > 0)
+                                {
+                                    query.Remove(query.Length - 1, 1);
+                                    cursor = 0;
+                                }
+                            }
+                            else if (!char.IsControl(key.KeyChar))
+                            {
+                                query.Append(key.KeyChar);
                                 cursor = 0;
                             }
                         }
-                        else if (!char.IsControl(key.KeyChar))
+                        else if (inputEvent.Type == InputEventType.ScrollUp)
                         {
-                            query.Append(key.KeyChar);
-                            cursor = 0;
+                            if (cursor > 0) cursor--;
+                        }
+                        else if (inputEvent.Type == InputEventType.ScrollDown)
+                        {
+                            if (cursor < filtered.Count - 1) cursor++;
                         }
                     }
-                    else if (inputEvent.Type == InputEventType.ScrollUp)
-                    {
-                        if (cursor > 0) cursor--;
-                    }
-                    else if (inputEvent.Type == InputEventType.ScrollDown)
-                    {
-                        if (cursor < filtered.Count - 1) cursor++;
-                    }
+
+                    await Task.Delay(15, token);
                 }
 
-                await Task.Delay(15, token);
+                return Array.Empty<int>();
             }
-
-            return Array.Empty<int>();
+            finally
+            {
+                Engine.ExitFullScreen();
+            }
         }
 
         private static void RenderSearch(StringBuilder buffer, string title, string queryString, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap)

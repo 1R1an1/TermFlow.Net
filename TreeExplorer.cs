@@ -25,7 +25,15 @@ namespace ConsoleUtils
         /// </summary>
         public static async Task<string> ExploreOneAsync(string title, string rootDir, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
         {
-            return await InternalExploreAsync(title, rootDir, isMulti: false, filter, token).ContinueWith(t => t.Result.FirstOrDefault(), token);
+            Engine.EnterFullScreen();
+            try
+            {
+                return await InternalExploreAsync(title, rootDir, isMulti: false, filter, token).ContinueWith(t => t.Result.FirstOrDefault(), token);
+            }
+            finally
+            {
+                Engine.ExitFullScreen();
+            }
         }
 
         /// <summary>
@@ -34,7 +42,15 @@ namespace ConsoleUtils
         /// </summary>
         public static async Task<string[]> ExploreMultiAsync(string title, string rootDir, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
         {
-            return await InternalExploreAsync(title, rootDir, isMulti: true, filter, token);
+            Engine.EnterFullScreen();
+            try
+            {
+                return await InternalExploreAsync(title, rootDir, isMulti: true, filter, token);
+            }
+            finally
+            {
+                Engine.ExitFullScreen();
+            }
         }
 
         private static async Task<string[]> InternalExploreAsync(string title, string rootDir, bool isMulti, ExplorerFilter filter, CancellationToken token)

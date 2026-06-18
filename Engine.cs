@@ -41,8 +41,10 @@ public static class Engine
                 }
             }
         }
+    }
 
-        // 3. Secuencia maestra de escape ANSI:
+    public static void EnterFullScreen()
+    {
         // \x1b[?1049h -> Activar alternate screen buffer (Lienzo limpio sin alterar la consola previa)
         // \x1b[2J     -> Limpiar pantalla completa
         // \x1b[?25l    -> Ocultar el cursor físico de la terminal
@@ -51,7 +53,7 @@ public static class Engine
         Console.Write("\x1b[?1049h\x1b[2J\x1b[?25l\x1b[?1002h\x1b[?1006h");
     }
 
-    public static void Shutdown()
+    public static void ExitFullScreen()
     {
         // Secuencia de restauración total:
         // \x1b[?1002l\x1b[?1006l -> Apagar tracking de mouse

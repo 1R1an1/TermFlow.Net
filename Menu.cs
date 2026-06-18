@@ -13,155 +13,171 @@ namespace ConsoleUtils
 
         public static async Task<int> SelectOneAsync(string title, string[] items, CancellationToken token = default)
         {
-            int cursor = 0;
-            int scroll = 0;
-            StringBuilder buffer = new StringBuilder(2048);
-
-            int lastHeight = Console.WindowHeight;
-            int lastWidth = Console.WindowWidth;
-            bool shouldRender = true;
-
-            while (!token.IsCancellationRequested)
+            Engine.EnterFullScreen();
+            try
             {
-                if (Console.WindowHeight != lastHeight || Console.WindowWidth != lastWidth)
+                int cursor = 0;
+                int scroll = 0;
+                StringBuilder buffer = new StringBuilder(2048);
+
+                int lastHeight = Console.WindowHeight;
+                int lastWidth = Console.WindowWidth;
+                bool shouldRender = true;
+
+                while (!token.IsCancellationRequested)
                 {
-                    lastHeight = Console.WindowHeight;
-                    lastWidth = Console.WindowWidth;
-                    shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
-
-                int visibleRows = Math.Max(1, Console.WindowHeight - ReservedRows);
-
-                if (cursor < scroll) { scroll = cursor; shouldRender = true; }
-                if (cursor >= scroll + visibleRows) { scroll = cursor - visibleRows + 1; shouldRender = true; }
-
-                if (shouldRender)
-                {
-                    RenderMenu(buffer, title, items, cursor, scroll, visibleRows, selectedMap: null);
-                    shouldRender = false;
-                }
-
-                var inputEvent = InputReader.ReadInput();
-
-                if (inputEvent.Type != InputEventType.None)
-                {
-                    shouldRender = true;
-
-                    if (inputEvent.Type == InputEventType.Key)
+                    if (Console.WindowHeight != lastHeight || Console.WindowWidth != lastWidth)
                     {
-                        var key = inputEvent.KeyInfo;
+                        lastHeight = Console.WindowHeight;
+                        lastWidth = Console.WindowWidth;
+                        shouldRender = true;
+                        Console.Write("\x1b[2J");
+                    }
 
-                        if (key.Key == ConsoleKey.Escape || key.KeyChar == 'q' || key.KeyChar == 'Q') return -1;
-                        if (key.Key == ConsoleKey.Enter) return cursor;
+                    int visibleRows = Math.Max(1, Console.WindowHeight - ReservedRows);
 
-                        if (key.Key == ConsoleKey.UpArrow || key.KeyChar == 'k' || key.KeyChar == 'K')
+                    if (cursor < scroll) { scroll = cursor; shouldRender = true; }
+                    if (cursor >= scroll + visibleRows) { scroll = cursor - visibleRows + 1; shouldRender = true; }
+
+                    if (shouldRender)
+                    {
+                        RenderMenu(buffer, title, items, cursor, scroll, visibleRows, selectedMap: null);
+                        shouldRender = false;
+                    }
+
+                    var inputEvent = InputReader.ReadInput();
+
+                    if (inputEvent.Type != InputEventType.None)
+                    {
+                        shouldRender = true;
+
+                        if (inputEvent.Type == InputEventType.Key)
+                        {
+                            var key = inputEvent.KeyInfo;
+
+                            if (key.Key == ConsoleKey.Escape || key.KeyChar == 'q' || key.KeyChar == 'Q') return -1;
+                            if (key.Key == ConsoleKey.Enter) return cursor;
+
+                            if (key.Key == ConsoleKey.UpArrow || key.KeyChar == 'k' || key.KeyChar == 'K')
+                            {
+                                if (cursor > 0) cursor--;
+                            }
+                            if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
+                            {
+                                if (cursor < items.Length - 1) cursor++;
+                            }
+                            if (key.KeyChar == 'g') cursor = 0;
+                            if (key.KeyChar == 'G') cursor = items.Length - 1;
+                        }
+                        else if (inputEvent.Type == InputEventType.ScrollUp)
                         {
                             if (cursor > 0) cursor--;
                         }
-                        if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
+                        else if (inputEvent.Type == InputEventType.ScrollDown)
                         {
                             if (cursor < items.Length - 1) cursor++;
                         }
-                        if (key.KeyChar == 'g') cursor = 0;
-                        if (key.KeyChar == 'G') cursor = items.Length - 1;
                     }
-                    else if (inputEvent.Type == InputEventType.ScrollUp)
-                    {
-                        if (cursor > 0) cursor--;
-                    }
-                    else if (inputEvent.Type == InputEventType.ScrollDown)
-                    {
-                        if (cursor < items.Length - 1) cursor++;
-                    }
+
+                    await Task.Delay(15, token);
                 }
 
-                await Task.Delay(15, token);
+                return -1;
             }
-
-            return -1;
+            finally
+            {
+                Engine.ExitFullScreen();
+            }
         }
 
         public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
-            int cursor = 0;
-            StringBuilder buffer = new StringBuilder(2048);
-
-            ScrollState layout = new ScrollState();
-            bool shouldRender = true;
-
-            HashSet<int> selectedMap = new HashSet<int>();
-            if (preselected != null)
+            Engine.EnterFullScreen();
+            try
             {
-                for (int i = 0; i < preselected.Length; i++)
-                {
-                    if (i < items.Length && preselected[i]) selectedMap.Add(i);
-                }
-            }
+                int cursor = 0;
+                StringBuilder buffer = new StringBuilder(2048);
 
-            while (!token.IsCancellationRequested)
-            {
-                if (layout.Update(cursor, items.Length, ReservedRows))
-                {
-                    shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
-                cursor = layout.Cursor;
-                if (shouldRender)
-                {
-                    RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap);
-                    shouldRender = false;
-                }
+                ScrollState layout = new ScrollState();
+                bool shouldRender = true;
 
-                var inputEvent = InputReader.ReadInput();
-
-                if (inputEvent.Type != InputEventType.None)
+                HashSet<int> selectedMap = new HashSet<int>();
+                if (preselected != null)
                 {
-                    shouldRender = true;
-
-                    if (inputEvent.Type == InputEventType.Key)
+                    for (int i = 0; i < preselected.Length; i++)
                     {
-                        var key = inputEvent.KeyInfo;
+                        if (i < items.Length && preselected[i]) selectedMap.Add(i);
+                    }
+                }
 
-                        if (key.Key == ConsoleKey.Escape || key.KeyChar == 'q' || key.KeyChar == 'Q') return Array.Empty<int>();
+                while (!token.IsCancellationRequested)
+                {
+                    if (layout.Update(cursor, items.Length, ReservedRows))
+                    {
+                        shouldRender = true;
+                        Console.Write("\x1b[2J");
+                    }
+                    cursor = layout.Cursor;
+                    if (shouldRender)
+                    {
+                        RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap);
+                        shouldRender = false;
+                    }
 
-                        if (key.KeyChar == 'c' || key.KeyChar == 'C' || key.Key == ConsoleKey.Enter)
+                    var inputEvent = InputReader.ReadInput();
+
+                    if (inputEvent.Type != InputEventType.None)
+                    {
+                        shouldRender = true;
+
+                        if (inputEvent.Type == InputEventType.Key)
                         {
-                            int[] result = new int[selectedMap.Count];
-                            selectedMap.CopyTo(result);
-                            Array.Sort(result);
-                            return result;
+                            var key = inputEvent.KeyInfo;
+
+                            if (key.Key == ConsoleKey.Escape || key.KeyChar == 'q' || key.KeyChar == 'Q') return Array.Empty<int>();
+
+                            if (key.KeyChar == 'c' || key.KeyChar == 'C' || key.Key == ConsoleKey.Enter)
+                            {
+                                int[] result = new int[selectedMap.Count];
+                                selectedMap.CopyTo(result);
+                                Array.Sort(result);
+                                return result;
+                            }
+                            if (key.Key == ConsoleKey.Spacebar)
+                            {
+                                if (selectedMap.Contains(cursor)) selectedMap.Remove(cursor);
+                                else selectedMap.Add(cursor);
+                            }
+                            if (key.Key == ConsoleKey.UpArrow || key.KeyChar == 'k' || key.KeyChar == 'K')
+                            {
+                                if (cursor > 0) cursor--;
+                            }
+                            if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
+                            {
+                                if (cursor < items.Length - 1) cursor++;
+                            }
+                            if (key.KeyChar == 'g') cursor = 0;
+                            if (key.KeyChar == 'G') cursor = items.Length - 1;
                         }
-                        if (key.Key == ConsoleKey.Spacebar)
-                        {
-                            if (selectedMap.Contains(cursor)) selectedMap.Remove(cursor);
-                            else selectedMap.Add(cursor);
-                        }
-                        if (key.Key == ConsoleKey.UpArrow || key.KeyChar == 'k' || key.KeyChar == 'K')
+                        else if (inputEvent.Type == InputEventType.ScrollUp)
                         {
                             if (cursor > 0) cursor--;
                         }
-                        if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
+                        else if (inputEvent.Type == InputEventType.ScrollDown)
                         {
                             if (cursor < items.Length - 1) cursor++;
                         }
-                        if (key.KeyChar == 'g') cursor = 0;
-                        if (key.KeyChar == 'G') cursor = items.Length - 1;
                     }
-                    else if (inputEvent.Type == InputEventType.ScrollUp)
-                    {
-                        if (cursor > 0) cursor--;
-                    }
-                    else if (inputEvent.Type == InputEventType.ScrollDown)
-                    {
-                        if (cursor < items.Length - 1) cursor++;
-                    }
+
+                    await Task.Delay(15, token);
                 }
 
-                await Task.Delay(15, token);
+                return Array.Empty<int>();
             }
-
-            return Array.Empty<int>();
+            finally
+            {
+                Engine.ExitFullScreen();
+            }
         }
 
         private static void RenderMenu(StringBuilder buffer, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap)
