@@ -1,6 +1,7 @@
 using System;
+using TermFlow.Core;
 
-namespace TermFlow
+namespace TermFlow.Components.InLine
 {
     public static class TextViewer
     {

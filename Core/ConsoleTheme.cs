@@ -1,4 +1,4 @@
-namespace TermFlow;
+namespace TermFlow.Core;
 
 public class ConsoleTheme
 {

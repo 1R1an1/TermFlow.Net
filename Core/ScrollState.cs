@@ -1,6 +1,6 @@
 using System;
 
-namespace TermFlow
+namespace TermFlow.Core
 {
     public struct ScrollState
     {

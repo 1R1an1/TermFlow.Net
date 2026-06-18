@@ -2,8 +2,9 @@ using System;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Core;
 
-namespace TermFlow
+namespace TermFlow.Components.InLine
 {
     public static class TextInput
     {

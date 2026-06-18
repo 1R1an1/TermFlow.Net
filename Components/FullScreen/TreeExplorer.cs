@@ -5,8 +5,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Core;
 
-namespace TermFlow
+namespace TermFlow.Components.FullScreen
 {
     public enum ExplorerFilter
     {

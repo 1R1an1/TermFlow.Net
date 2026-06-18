@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace TermFlow;
+namespace TermFlow.Core;
 
 public static class Engine
 {

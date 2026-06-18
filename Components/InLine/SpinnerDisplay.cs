@@ -1,8 +1,9 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Core;
 
-namespace TermFlow
+namespace TermFlow.Components.InLine
 {
     public static class SpinnerDisplay
     {

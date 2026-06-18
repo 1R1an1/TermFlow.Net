@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Components.FullScreen;
+using TermFlow.Components.InLine;
+using TermFlow.Core;
 
 namespace TermFlow;
 

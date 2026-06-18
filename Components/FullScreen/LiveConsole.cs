@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Core;
 
-namespace TermFlow
+namespace TermFlow.Components.FullScreen
 {
     public class LiveConsole
     {

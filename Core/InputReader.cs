@@ -2,7 +2,7 @@ using System;
 using System.Text;
 using System.Threading;
 
-namespace TermFlow;
+namespace TermFlow.Core;
 
 public enum InputEventType
 {
