@@ -1,11 +1,19 @@
-﻿using System;
+﻿using System.Threading.Tasks;
 
 namespace ConsoleUtils;
 
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
-        Console.WriteLine("Hello, World!");
+        Engine.Setup();
+        try
+        {
+            await Menu.SelectMultiAsync("Prueba", new string[] { "hola", "pedro", "pepe", "hola", "pedro", "pepe", "hola", "pedro", "pepe", "hola", "pedro", "pepe", "hola", "pedro", "pepe", "hola", "pedro", "pepe", });
+        }
+        finally
+        {
+            Engine.Shutdown();
+        }
     }
 }
