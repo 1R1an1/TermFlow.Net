@@ -52,7 +52,7 @@ namespace ConsoleUtils
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
 
             // Hilo 1: Lector reactivo de teclado y mouse
-            Task inputTask = Task.Run(() => ProcessInput(internalCts.Token, onInputSubmitted), internalCts.Token);
+            Task inputTask = Task.Run(() => ProcessInput(internalCts, onInputSubmitted), internalCts.Token);
 
             try
             {
@@ -96,8 +96,9 @@ namespace ConsoleUtils
             }
         }
 
-        private async Task ProcessInput(CancellationToken token, Func<string, Task> onInputSubmitted)
+        private async Task ProcessInput(CancellationTokenSource cts, Func<string, Task> onInputSubmitted)
         {
+            var token = cts.Token;
             try
             {
                 while (!token.IsCancellationRequested)
@@ -132,12 +133,20 @@ namespace ConsoleUtils
                                     _inputBuffer = "";
                                     _scrollOffset = 0; // Al enviar algo, el scroll se pega abajo al 100%
 
+                                    // SOPORTE PARA /EXIT: Si escribe /exit, cancelamos el CTS y salimos
+                                    if (msg.Trim().Equals("/exit", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        cts.Cancel();
+                                        return;
+                                    }
+
                                     // Disparamos la lógica de red sin frenar el render
                                     Task.Run(() => onInputSubmitted(msg), token);
                                 }
                             }
                             else if (key.Key == ConsoleKey.Escape) // Salir con Esc limpio
                             {
+                                cts.Cancel();
                                 return; // Rompe el bucle de input, el RunAsync() principal lo detectará
                             }
                             else if (key.Key == ConsoleKey.UpArrow) { _scrollOffset++; }
