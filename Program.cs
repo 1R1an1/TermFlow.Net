@@ -40,7 +40,7 @@ class Program
             while (true)
             {
                 await Task.Delay(3000); // Simulamos mensajes que caen del servidor
-                liveChat.WriteLog($"[SERVER] Ping recibido a las {DateTime.Now:HH:mm:ss}");
+                liveChat.WriteLog($"{Engine.Theme.Cyan}[SERVER]{Engine.Theme.Reset} Ping recibido a las {DateTime.Now:HH:mm:ss}");
             }
         });
 
@@ -50,7 +50,7 @@ class Program
             onInputSubmitted: async (mensaje) =>
             {
                 // 1. Lo agregas a tu propia pantalla
-                liveChat.WriteLog($"Tú: {mensaje}");
+                liveChat.WriteLog($"{Engine.Theme.Primary}Tú{Engine.Theme.Reset}: {mensaje}");
 
                 // 2. Ejecutás tu sobrecarga de envío (ControlHub.SendBinary / SendCommand)
                 // await ControlHubNetwork.SendAsync(mensaje);

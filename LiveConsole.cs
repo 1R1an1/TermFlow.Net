@@ -31,6 +31,17 @@ namespace ConsoleUtils
             lock (_stateLock)
             {
                 _logs.Add(message);
+
+                // FIX: Si el usuario está scrolleando arriba, aumentamos el offset
+                // en la cantidad exacta de líneas que ocupa el nuevo log para congelar la pantalla.
+                if (_scrollOffset > 0)
+                {
+                    int width = 80;
+                    try { width = Console.WindowWidth; } catch { }
+                    int newLines = WrapText(message, width).Count;
+                    _scrollOffset += newLines;
+                }
+
                 if (_logs.Count > _maxLogs)
                 {
                     _logs.RemoveAt(0); // Mantenemos el consumo de memoria a raya
@@ -75,10 +86,7 @@ namespace ConsoleUtils
                     RenderScreen(prompt, lastWidth, lastHeight);
                 }
             }
-            catch (OperationCanceledException)
-            {
-                // Aborto fino al microsegundo
-            }
+            catch (OperationCanceledException) { }
             finally
             {
                 internalCts.Cancel();
@@ -127,21 +135,34 @@ namespace ConsoleUtils
                         {
                             if (key.Key == ConsoleKey.Enter)
                             {
-                                if (!string.IsNullOrWhiteSpace(_inputBuffer))
+                                // Detectar Shift+Enter o Alt+Enter para salto de línea interno
+                                bool WantsNewLine = (key.Modifiers & ConsoleModifiers.Shift) != 0 ||
+                                                    (key.Modifiers & ConsoleModifiers.Alt) != 0;
+
+                                if (WantsNewLine)
                                 {
-                                    string msg = _inputBuffer;
-                                    _inputBuffer = "";
-                                    _scrollOffset = 0; // Al enviar algo, el scroll se pega abajo al 100%
-
-                                    // SOPORTE PARA /EXIT: Si escribe /exit, cancelamos el CTS y salimos
-                                    if (msg.Trim().Equals("/exit", StringComparison.OrdinalIgnoreCase))
+                                    _inputBuffer += "\n";
+                                    _scrollOffset = 0; // Lleva la vista al presente al escribir
+                                }
+                                else
+                                {
+                                    // Enter común: Enviar mensaje
+                                    if (!string.IsNullOrWhiteSpace(_inputBuffer))
                                     {
-                                        cts.Cancel();
-                                        return;
-                                    }
+                                        string msg = _inputBuffer;
+                                        _inputBuffer = "";
+                                        _scrollOffset = 0; // Al enviar algo, el scroll se pega abajo al 100%
 
-                                    // Disparamos la lógica de red sin frenar el render
-                                    Task.Run(() => onInputSubmitted(msg), token);
+                                        // SOPORTE PARA /EXIT: Si escribe /exit, cancelamos el CTS y salimos
+                                        if (msg.Trim().Equals("/exit", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            cts.Cancel();
+                                            return;
+                                        }
+
+                                        // Disparamos la lógica de red sin frenar el render
+                                        Task.Run(() => onInputSubmitted(msg), token);
+                                    }
                                 }
                             }
                             else if (key.Key == ConsoleKey.Escape) // Salir con Esc limpio
@@ -191,11 +212,18 @@ namespace ConsoleUtils
                 currentInput = _inputBuffer;
                 currentScroll = _scrollOffset;
 
-                // Calculamos cuántas filas va a ocupar el input elástico
-                int inputRows = ((prompt.Length + currentInput.Length) / width) + 1;
-                int logRowsAvailable = Math.Max(1, height - inputRows - 1); // -1 por la barra divisoria
+                // FIX: Cálculo elástico de filas soportando múltiples líneas reales (\n)
+                int inputRows = 0;
+                string[] inputLines = currentInput.Split('\n');
 
-                // Procesamos las líneas wrapeadas de abajo hacia arriba para el scroll
+                // La primera línea cuenta junto con el prompt de la consola
+                inputRows += Math.Max(1, WrapText(prompt + inputLines[0], width).Count);
+                for (int i = 1; i < inputLines.Length; i++)
+                {
+                    inputRows += Math.Max(1, WrapText(inputLines[i], width).Count);
+                }
+
+                int logRowsAvailable = Math.Max(1, height - inputRows - 1);
                 visibleLines = GetVisibleLogLines(width, logRowsAvailable, currentScroll);
             }
 
@@ -208,10 +236,18 @@ namespace ConsoleUtils
             // 2. Dibujamos la barra divisoria
             buffer.Append($"{theme.Dim}{new string(theme.BorderHorizontal, width)}{theme.Reset}\x1b[K\n");
 
-            // 3. Dibujamos el prompt y el texto actual (el cursor físico se quedará al final exacto)
-            buffer.Append($"{theme.Primary}{theme.Bold}{prompt}{theme.Reset}{currentInput}\x1b[K");
+            // 3. FIX: Dibujamos el prompt y el bloque multilínea del input limpiando renglón por renglón
+            buffer.Append($"{theme.Primary}{theme.Bold}{prompt}{theme.Reset}");
+            string[] renderInputLines = currentInput.Split('\n');
+            for (int i = 0; i < renderInputLines.Length; i++)
+            {
+                buffer.Append(renderInputLines[i]).Append("\x1b[K");
+                if (i < renderInputLines.Length - 1)
+                {
+                    buffer.Append("\n");
+                }
+            }
 
-            // Volcamos todo a la consola de un solo golpe
             Console.Write(buffer.ToString());
         }
 
@@ -257,9 +293,22 @@ namespace ConsoleUtils
             if (width <= 0) return new List<string> { text };
             var lines = new List<string>();
 
-            for (int i = 0; i < text.Length; i += width)
+            // 1. Separamos primero por los saltos de línea reales (\n) del mensaje
+            string[] paragraphs = text.Split('\n');
+
+            foreach (var paragraph in paragraphs)
             {
-                lines.Add(text.Substring(i, Math.Min(width, text.Length - i)));
+                if (paragraph.Length == 0)
+                {
+                    lines.Add(""); // Línea vacía si el usuario metió un Enter doble
+                    continue;
+                }
+
+                // 2. Envolvemos cada párrafo según el ancho de la ventana
+                for (int i = 0; i < paragraph.Length; i += width)
+                {
+                    lines.Add(paragraph.Substring(i, Math.Min(width, paragraph.Length - i)));
+                }
             }
             return lines;
         }
