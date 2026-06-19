@@ -42,6 +42,18 @@ public static class Engine
                 }
             }
         }
+
+
+        // 1. Captura SIGTERM (Cierre del sistema, kill ordinario) y salidas normales
+        AppDomain.CurrentDomain.ProcessExit += (s, e) => ExitFullScreen();
+
+        // 2. Captura SIGINT (Ctrl + C en la terminal)
+        Console.CancelKeyPress += (s, e) =>
+        {
+            // false significa: "Dejá que el proceso muera normalmente después de que termine este evento"
+            e.Cancel = false;
+            ExitFullScreen();
+        };
     }
 
     public static void EnterFullScreen(bool captureMouse = true)
@@ -53,7 +65,7 @@ public static class Engine
         // \x1b[?1006h -> Activar formato extendido SGR para tracking de mouse preciso
         if (!isFullScreen)
         {
-            Console.Write("\x1b[?1049h\x1b[2J\x1b[?25l" + (captureMouse ? "\x1b[?1002h\x1b[?1006h" : ""));
+            Console.Write("\x1b[?1049h\x1b[2J\x1b[?25l" + (captureMouse ? "\x1b[?1000h\x1b[?1006h" : ""));
             isFullScreen = true;
         }
     }
@@ -66,7 +78,7 @@ public static class Engine
         // \x1b[?1049l            -> Volver al main screen buffer restaurando todo como estaba antes
         if (isFullScreen)
         {
-            Console.Write("\x1b[?1002l\x1b[?1006l\x1b[?25h\x1b[?1049l");
+            Console.Write("\x1b[?1000l\x1b[?1006l\x1b[?25h\x1b[?1049l");
             isFullScreen = false;
         }
     }
