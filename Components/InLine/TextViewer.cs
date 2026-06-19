@@ -5,34 +5,15 @@ namespace TermFlow.Components.InLine
 {
     public static class TextViewer
     {
-        public static void Info(string msg)
-        {
-            var theme = Engine.Theme;
-            Console.WriteLine($"\r\x1b[K{theme.Cyan}{theme.InfoBullet}{theme.Reset} {msg}");
-        }
+        public static void Info(string msg) => Console.WriteLine($"\r\x1b[K{ThemeColors.Info}{ConsoleGlyphs.InfoBullet}{ThemeColors.Reset} {msg}");
 
-        public static void Success(string msg)
-        {
-            var theme = Engine.Theme;
-            Console.WriteLine($"\r\x1b[K{theme.Success}{theme.Checked}{theme.Reset} {msg}");
-        }
+        public static void Success(string msg) => Console.WriteLine($"\r\x1b[K{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} {msg}");
 
-        public static void Warn(string msg)
-        {
-            var theme = Engine.Theme;
-            Console.WriteLine($"\r\x1b[K{theme.Warning}!{theme.Reset} {msg}");
-        }
+        public static void Warn(string msg, bool allColor = true) => Console.WriteLine($"\r\x1b[K{ThemeColors.Warning}!" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}"));
 
-        public static void Error(string msg)
-        {
-            var theme = Engine.Theme;
-            Console.WriteLine($"\r\x1b[K{theme.Error}✘{theme.Reset} {msg}");
-        }
+        public static void Error(string msg, bool allColor = true) => Console.WriteLine($"\r\x1b[K{ThemeColors.Error}✘" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}"));
 
-        public static void WritePlain(string msg)
-        {
-            Console.WriteLine("\r\x1b[K" + msg);
-        }
+        public static void WritePlain(string msg) => Console.WriteLine("\r\x1b[K" + msg);
 
         /// <summary>
         /// Genera de forma independiente un encabezado estético sobre el flujo normal,
@@ -40,9 +21,9 @@ namespace TermFlow.Components.InLine
         /// </summary>
         public static void WriteHeader(string title)
         {
-            var theme = Engine.Theme;
-            Console.WriteLine($"{theme.Title}{theme.Bold}{title}{theme.Reset}");
-            Console.WriteLine($"{theme.Dim}{new string(theme.BorderHorizontal, title.Length)}{theme.Reset}");
+
+            Console.WriteLine(title);
+            Console.WriteLine($"{ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.Length)}{ThemeColors.Reset}");
         }
     }
 }

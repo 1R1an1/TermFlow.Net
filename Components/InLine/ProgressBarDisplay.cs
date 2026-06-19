@@ -29,7 +29,7 @@ namespace TermFlow.Components.InLine
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             var taskState = new ProgressTaskImpl();
-            var theme = Engine.Theme;
+
 
             Console.CursorVisible = false;
 
@@ -59,7 +59,7 @@ namespace TermFlow.Components.InLine
                         if (percentage > 1.0) percentage = 1.0;
 
                         // 1. Columna Descripción
-                        string colDesc = $"{theme.Primary}{description}{theme.Reset} ";
+                        string colDesc = description + " ";
 
                         // 2. Columna Porcentaje
                         string colPercent = $" {(int)(percentage * 100)}% ";
@@ -79,7 +79,7 @@ namespace TermFlow.Components.InLine
 
                         string barFilled = new string('█', Math.Max(0, filledBlocks));
                         string barEmpty = new string('░', Math.Max(0, emptyBlocks));
-                        string colBar = $"{theme.Success}[{barFilled}{theme.Dim}{barEmpty}{theme.Success}]{theme.Reset}";
+                        string colBar = $"{ThemeColors.Success}[{barFilled}{ThemeColors.Dim}{barEmpty}{ThemeColors.Success}]{ThemeColors.Reset}";
 
                         // Ensamblar buffer completo de la línea
                         lineBuffer.Clear();
@@ -120,7 +120,7 @@ namespace TermFlow.Components.InLine
 
                 // Dibujar estado final al 100% clavado e inline
                 int width = fixedBarWidth ?? 20;
-                Console.Write($"\r{theme.Success}{theme.Checked} {description} {theme.Success}[{new string('█', width)}] 100% {theme.Dim}(Completado){theme.Reset}\x1b[K\n");
+                Console.Write($"\r{ThemeColors.Success}{ConsoleGlyphs.Checked} {description} {ThemeColors.Success}[{new string('█', width)}] 100% {ThemeColors.Dim}(Completado){ThemeColors.Reset}\x1b[K\n");
                 Console.CursorVisible = true;
             }
         }

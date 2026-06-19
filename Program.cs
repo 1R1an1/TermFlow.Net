@@ -27,7 +27,7 @@ class Program
         };
 
         var lista = new string[] { "hola", "pedro", "pepe", "hola1", "pedro1", "pepe1", "hola2", "pedro2", "pepe2", "hola3", "pedro3", "pepe3", "hola4", "pedro4", "pepe4", "hola5", "pedro5", "pepe5", };
-        // var e = await TreeExplorer.ExploreMultiAsync("Explorar", "/home/xz1r1an1", ExplorerFilter.OnlyFiles);
+        var e = await TreeExplorer.ExploreMultiAsync("Explorar", "/home/xz1r1an1", ExplorerFilter.OnlyFiles);
         // foreach (var item in e)
         // {
         //     System.Console.WriteLine(item);
@@ -36,6 +36,8 @@ class Program
         // 1. Probamos el Input Box para pedir un dato común
         // Texto plano normal impreso a la vieja usanza
         var cts = new CancellationTokenSource();
+        var a = await SearchList.FilterOneAsync("ASDASDASD", lista);
+        await Menu.SelectOneAsync("dfgdfggdfghjdfg", lista);
 
         // 1. Probar el confirm inline
         if (await TextInput.AskAsync("¿Desea desplegar la lista de servidores activos?"))
@@ -49,7 +51,7 @@ class Program
         new[] { "003", "Backup_Node", "192.168.1.50:9000", "OFFLINE" }
     };
 
-            TableView.Show(headers, rows);
+            TableView.Show(headers, rows, ThemeColors.Primary + AnsiColor.Bold);
         }
 
         TextViewer.Info(await SpinnerDisplay.RunAsync(
@@ -63,17 +65,17 @@ class Program
             while (true)
             {
                 await Task.Delay(3000); // Simulamos mensajes que caen del servidor
-                liveChat.WriteLog($"{Engine.Theme.Cyan}[SERVER]{Engine.Theme.Reset} Ping recibido a las {DateTime.Now:HH:mm:ss}");
+                liveChat.WriteLog($"{AnsiColor.Cyan}[SERVER]{ThemeColors.Reset} Ping recibido a las {DateTime.Now:HH:mm:ss}");
             }
         });
 
         // Iniciás la interfaz bloqueando el hilo principal
         await liveChat.RunAsync(
-            prompt: $"{Engine.Theme.Dim}>>>{Engine.Theme.Reset} ",
+            prompt: $"{ThemeColors.Dim}>>>{ThemeColors.Reset} ",
             onInputSubmitted: async (mensaje) =>
             {
                 // 1. Lo agregas a tu propia pantalla
-                liveChat.WriteLog($"{Engine.Theme.Primary}Tú{Engine.Theme.Reset}: {mensaje}");
+                liveChat.WriteLog($"{ThemeColors.Primary}Tú{ThemeColors.Reset}: {mensaje}");
 
                 // 2. Ejecutás tu sobrecarga de envío (ControlHub.SendBinary / SendCommand)
                 // await ControlHubNetwork.SendAsync(mensaje);

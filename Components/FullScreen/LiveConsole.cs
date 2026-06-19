@@ -202,7 +202,7 @@ namespace TermFlow.Components.FullScreen
 
         private void RenderScreen(string prompt, int width, int height)
         {
-            var theme = Engine.Theme;
+
             StringBuilder buffer = new StringBuilder(4096);
             buffer.Append("\x1b[H"); // Mover el cursor arriba a la izquierda
 
@@ -258,7 +258,7 @@ namespace TermFlow.Components.FullScreen
             }
 
             // 2. Dibujamos la barra divisoria inteligente corregida
-            string dividerLine = new string(theme.BorderHorizontal, width);
+            string dividerLine = new string(ConsoleGlyphs.Horizontal, width);
 
             if (currentScroll > 0 && _hasNewLogsBelow)
             {
@@ -267,12 +267,12 @@ namespace TermFlow.Components.FullScreen
                 if (width > alertText.Length + 6)
                 {
                     int sideLength = (width - alertText.Length) / 2;
-                    string sideBar = new string(theme.BorderHorizontal, sideLength);
-                    buffer.Append($"{theme.Dim}{sideBar}{theme.Warning}{theme.Bold}{alertText}{theme.Reset}{theme.Dim}{new string(theme.BorderHorizontal, width - sideLength - alertText.Length)}{theme.Reset}\x1b[K\n");
+                    string sideBar = new string(ConsoleGlyphs.Horizontal, sideLength);
+                    buffer.Append($"{ThemeColors.Dim}{sideBar}{ThemeColors.Warning}{AnsiColor.Bold}{alertText}{ThemeColors.Reset}{ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, width - sideLength - alertText.Length)}{ThemeColors.Reset}\x1b[K\n");
                 }
                 else
                 {
-                    buffer.Append($"{theme.Warning}{dividerLine}{theme.Reset}\x1b[K\n");
+                    buffer.Append($"{ThemeColors.Warning}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
                 }
             }
             else if (currentScroll > 0)
@@ -282,22 +282,22 @@ namespace TermFlow.Components.FullScreen
                 if (width > historyText.Length + 6)
                 {
                     int sideLength = (width - historyText.Length) / 2;
-                    string sideBar = new string(theme.BorderHorizontal, sideLength);
-                    buffer.Append($"{theme.Dim}{sideBar}{historyText}{new string(theme.BorderHorizontal, width - sideLength - historyText.Length)}{theme.Reset}\x1b[K\n");
+                    string sideBar = new string(ConsoleGlyphs.Horizontal, sideLength);
+                    buffer.Append($"{ThemeColors.Dim}{sideBar}{historyText}{new string(ConsoleGlyphs.Horizontal, width - sideLength - historyText.Length)}{ThemeColors.Reset}\x1b[K\n");
                 }
                 else
                 {
-                    buffer.Append($"{theme.Dim}{dividerLine}{theme.Reset}\x1b[K\n");
+                    buffer.Append($"{ThemeColors.Dim}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
                 }
             }
             else
             {
                 // Barra normal opaca (Estás en el presente)
-                buffer.Append($"{theme.Dim}{dividerLine}{theme.Reset}\x1b[K\n");
+                buffer.Append($"{ThemeColors.Dim}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
             }
 
             // 3. FIX: Dibujamos el prompt y el bloque multilínea del input limpiando renglón por renglón
-            buffer.Append($"{theme.Primary}{theme.Bold}{prompt}{theme.Reset}");
+            buffer.Append(prompt);
             string[] renderInputLines = currentInput.Split('\n');
             for (int i = 0; i < renderInputLines.Length; i++)
             {

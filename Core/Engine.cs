@@ -6,9 +6,6 @@ namespace TermFlow.Core;
 
 public static class Engine
 {
-    // Propiedad global para acceder al tema activo desde cualquier componente
-    public static ConsoleTheme Theme { get; set; } = new ConsoleTheme();
-
     // Imports nativos de Windows para forzar el soporte ANSI
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern IntPtr GetStdHandle(int nStdHandle);

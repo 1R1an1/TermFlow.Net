@@ -245,29 +245,29 @@ namespace TermFlow.Components.FullScreen
 
         private static void RenderSearch(StringBuilder buffer, string title, string queryString, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap)
         {
-            var theme = Engine.Theme;
+
             buffer.Clear();
 
             // Mover cursor a origen
             buffer.Append("\x1b[H");
 
             // Cabecera
-            buffer.Append($"  {theme.Title}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
-            buffer.Append($"  {theme.Dim}{new string(theme.BorderHorizontal, Math.Max(20, title.Length))}{theme.Reset}\x1b[K\n");
+            buffer.Append($"  {title}\x1b[K\n");
+            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, Math.Max(20, title.Length))}{ThemeColors.Reset}\x1b[K\n");
 
             // Input de búsqueda predictiva (Ya no tiene el \n extra abajo, se une directo al indicador)
-            buffer.Append($"  Buscar: {theme.Primary}»{theme.Reset} {theme.Bold}{queryString}{theme.Reset}_\x1b[K\n");
+            buffer.Append($"  Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}_\x1b[K\n");
 
             int end = Math.Min(filtered.Count, scroll + visibleRows);
 
             // Indicador de scroll superior
-            if (scroll > 0) buffer.Append($"  {theme.Dim}↑ ({scroll} más arriba){theme.Reset}\x1b[K\n");
+            if (scroll > 0) buffer.Append($"  {ThemeColors.Dim}↑ ({scroll} más arriba){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
             // Renderizado de ítems filtrados
             if (filtered.Count == 0)
             {
-                buffer.Append($"    {theme.Dim}(No se encontraron resultados){theme.Reset}\x1b[K\n");
+                buffer.Append($"    {ThemeColors.Dim}(No se encontraron resultados){ThemeColors.Reset}\x1b[K\n");
                 for (int i = 1; i < visibleRows; i++) buffer.Append("\x1b[K\n");
             }
             else
@@ -279,17 +279,17 @@ namespace TermFlow.Components.FullScreen
                     if (selectedMap != null)
                     {
                         bool isChecked = selectedMap.Contains(filtered[i].OriginalIndex);
-                        checkPrefix = isChecked ? $"{theme.Success}{theme.Checked}{theme.Reset} "
-                                                : $"{theme.Dim}{theme.Unchecked}{theme.Reset} ";
+                        checkPrefix = isChecked ? $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} "
+                                                : $"{ThemeColors.Dim}{ConsoleGlyphs.Unchecked}{ThemeColors.Reset} ";
                     }
 
                     if (i == cursor)
                     {
-                        buffer.Append($"  {theme.Primary}{theme.Indicator}{theme.Reset} {checkPrefix}{theme.Bold}{filtered[i].Text}{theme.Reset}\x1b[K\n");
+                        buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{filtered[i].Text}{ThemeColors.Reset}\x1b[K\n");
                     }
                     else
                     {
-                        buffer.Append($"    {checkPrefix}{theme.Dim}{filtered[i].Text}{theme.Reset}\x1b[K\n");
+                        buffer.Append($"    {checkPrefix}{ThemeColors.Dim}{filtered[i].Text}{ThemeColors.Reset}\x1b[K\n");
                     }
                 }
 
@@ -302,13 +302,13 @@ namespace TermFlow.Components.FullScreen
 
             // Indicador de scroll inferior
             int remaining = filtered.Count - end;
-            if (remaining > 0) buffer.Append($"  {theme.Dim}↓ ({remaining} más abajo){theme.Reset}\x1b[K\n");
+            if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
             // Barra de instrucciones contextual interactiva
             buffer.Append("  ");
-            if (selectedMap != null) buffer.Append($"{theme.Warning}Space{theme.Reset} marcar  ");
-            buffer.Append($"{theme.Warning}Letras{theme.Reset} filtrar  {theme.Warning}↑↓/Wheel{theme.Reset} navegar  {theme.Warning}Backspace{theme.Reset} borrar  {theme.Warning}Enter{theme.Reset} elegir  {theme.Warning}Esc{theme.Reset} salir");
+            if (selectedMap != null) buffer.Append($"{ThemeColors.Warning}Space{ThemeColors.Reset} marcar  ");
+            buffer.Append($"{ThemeColors.Warning}Letras{ThemeColors.Reset} filtrar  {ThemeColors.Warning}↑↓/Wheel{ThemeColors.Reset} navegar  {ThemeColors.Warning}Backspace{ThemeColors.Reset} borrar  {ThemeColors.Warning}Enter{ThemeColors.Reset} elegir  {ThemeColors.Warning}Esc{ThemeColors.Reset} salir");
             buffer.Append("\x1b[K\n");
 
             // Última línea libre (Separación estética del borde negro inferior)

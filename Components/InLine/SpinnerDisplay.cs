@@ -13,7 +13,7 @@ namespace TermFlow.Components.InLine
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             string[] frames = customFrames ?? DefaultFrames;
-            var theme = Engine.Theme;
+
 
             Console.CursorVisible = false;
 
@@ -26,7 +26,7 @@ namespace TermFlow.Components.InLine
                     while (!internalCts.Token.IsCancellationRequested)
                     {
                         // \r vuelve al inicio, \x1b[K limpia hacia la derecha
-                        Console.Write($"\r{theme.Warning}{frames[frameIndex]}{theme.Reset} {description}\x1b[K");
+                        Console.Write($"\r{ThemeColors.Warning}{frames[frameIndex]}{ThemeColors.Reset} {description}\x1b[K");
                         frameIndex = (frameIndex + 1) % frames.Length;
 
                         await Task.Delay(80, internalCts.Token);
@@ -52,7 +52,7 @@ namespace TermFlow.Components.InLine
                 // Render final de éxito inline
                 Console.CursorVisible = true;
             }
-            return $"{description} {theme.Dim}{completionText}{theme.Reset}";
+            return $"{description} {ThemeColors.Dim}{completionText}{ThemeColors.Reset}";
         }
     }
 }

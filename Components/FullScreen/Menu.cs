@@ -191,20 +191,20 @@ namespace TermFlow.Components.FullScreen
 
         private static void RenderMenu(StringBuilder buffer, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap)
         {
-            var theme = Engine.Theme;
+
             buffer.Clear();
 
             // Mover al origen (0,0)
             buffer.Append("\x1b[H");
 
             // Cabecera optimizada: quitamos el \n extra. Agregamos \x1b[K para limpiar fantasmas.
-            buffer.Append($"  {theme.Title}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
-            buffer.Append($"  {theme.Dim}{new string(theme.BorderHorizontal, Math.Max(20, title.Length))}{theme.Reset}\x1b[K\n");
+            buffer.Append($"  {title}\x1b[K\n");
+            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, Math.Max(20, title.Length))}{ThemeColors.Reset}\x1b[K\n");
 
             int end = Math.Min(items.Length, scroll + visibleRows);
 
             // Indicador superior: si es 0, deja exactamente una línea en blanco limpia
-            if (scroll > 0) buffer.Append($"  {theme.Dim}↑ ({scroll} más arriba){theme.Reset}\x1b[K\n");
+            if (scroll > 0) buffer.Append($"  {ThemeColors.Dim}↑ ({scroll} más arriba){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
             // Elementos con borrado de línea individual (\x1b[K) para matar el bug de "pepeo"
@@ -214,17 +214,17 @@ namespace TermFlow.Components.FullScreen
                 if (selectedMap != null)
                 {
                     bool isChecked = selectedMap.Contains(i);
-                    checkPrefix = isChecked ? $"{theme.Success}{theme.Checked}{theme.Reset} "
-                                            : $"{theme.Dim}{theme.Unchecked}{theme.Reset} ";
+                    checkPrefix = isChecked ? $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} "
+                                            : $"{ThemeColors.Dim}{ConsoleGlyphs.Unchecked}{ThemeColors.Reset} ";
                 }
 
                 if (i == cursor)
                 {
-                    buffer.Append($"  {theme.Primary}{theme.Indicator}{theme.Reset} {checkPrefix}{theme.Bold}{items[i]}{theme.Reset}\x1b[K\n");
+                    buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{items[i]}{ThemeColors.Reset}\x1b[K\n");
                 }
                 else
                 {
-                    buffer.Append($"    {checkPrefix}{theme.Dim}{items[i]}{theme.Reset}\x1b[K\n");
+                    buffer.Append($"    {checkPrefix}{ThemeColors.Dim}{items[i]}{ThemeColors.Reset}\x1b[K\n");
                 }
             }
 
@@ -236,13 +236,13 @@ namespace TermFlow.Components.FullScreen
 
             // Indicador inferior
             int remaining = items.Length - end;
-            if (remaining > 0) buffer.Append($"  {theme.Dim}↓ ({remaining} más abajo){theme.Reset}\x1b[K\n");
+            if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
             // Barra de instrucciones (Se imprime en la penúltima línea)
             buffer.Append("  ");
-            if (selectedMap != null) buffer.Append($"{theme.Warning}Space{theme.Reset} marcar  ");
-            buffer.Append($"{theme.Warning}↑↓/j/k{theme.Reset} navegar  {theme.Warning}MouseWheel{theme.Reset} scroll  {theme.Warning}Enter/c{theme.Reset} confirmar  {theme.Warning}Esc/q{theme.Reset} salir");
+            if (selectedMap != null) buffer.Append($"{ThemeColors.Warning}Space{ThemeColors.Reset} marcar  ");
+            buffer.Append($"{ThemeColors.Warning}↑↓/j/k{ThemeColors.Reset} navegar  {ThemeColors.Warning}MouseWheel{ThemeColors.Reset} scroll  {ThemeColors.Warning}Enter/c{ThemeColors.Reset} confirmar  {ThemeColors.Warning}Esc/q{ThemeColors.Reset} salir");
             buffer.Append("\x1b[K\n"); // Salta a la última línea absoluta
 
             // Última línea: la limpiamos pero NO ponemos \n para evitar el scroll del buffer.

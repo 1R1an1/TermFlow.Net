@@ -293,22 +293,22 @@ namespace TermFlow.Components.FullScreen
 
         private static void RenderTree(StringBuilder buffer, string title, string currentDir, List<string> entries, int cursor, int scroll, int visibleRows, bool isMulti, ExplorerFilter filter, HashSet<string> marked, HashSet<string> unmarkedExceptions)
         {
-            var theme = Engine.Theme;
+
             buffer.Clear().Append("\x1b[H");
 
             // Cabeceras
-            buffer.Append($"  {theme.Title}{theme.Bold}{title}{theme.Reset}\x1b[K\n");
-            buffer.Append($"  {theme.Dim}{new string(theme.BorderHorizontal, Math.Max(20, title.Length))}{theme.Reset}\x1b[K\n");
-            buffer.Append($"  Ruta: {theme.Dim}{currentDir}{theme.Reset}\x1b[K\n");
+            buffer.Append($"  {title}\x1b[K\n");
+            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, Math.Max(20, title.Length))}{ThemeColors.Reset}\x1b[K\n");
+            buffer.Append($"  Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}\x1b[K\n");
 
             int end = Math.Min(entries.Count, scroll + visibleRows);
 
-            if (scroll > 0) buffer.Append($"  {theme.Dim}↑ ({scroll} más arriba){theme.Reset}\x1b[K\n");
+            if (scroll > 0) buffer.Append($"  {ThemeColors.Dim}↑ ({scroll} más arriba){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
             if (entries.Count == 0)
             {
-                buffer.Append($"    {theme.Dim}(Carpeta vacía o sin accesos){theme.Reset}\x1b[K\n");
+                buffer.Append($"    {ThemeColors.Dim}(Carpeta vacía o sin accesos){ThemeColors.Reset}\x1b[K\n");
                 for (int i = 1; i < visibleRows; i++) buffer.Append("\x1b[K\n");
             }
             else
@@ -332,28 +332,29 @@ namespace TermFlow.Components.FullScreen
                         if (showCheckbox)
                         {
                             bool isChecked = IsPathMarked(fullPath, marked, unmarkedExceptions);
-                            checkPrefix = isChecked ? $"{theme.Success}{theme.Checked}{theme.Reset} "
-                                                    : $"{theme.Dim}{theme.Unchecked}{theme.Reset} ";
+                            checkPrefix = isChecked ? $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} "
+                                                    : $"{ThemeColors.Dim}{ConsoleGlyphs.Unchecked}{ThemeColors.Reset} ";
                         }
                         else
                         {
                             // Medimos la longitud real del texto del checkbox de tu tema (+ 1 espacio de separación)
                             // y generamos la cantidad exacta de espacios en blanco para una alineación matemática perfecta.
-                            int visualWidth = (theme.Unchecked ?? "[ ]").Length + 1;
+                            int visualWidth = (ConsoleGlyphs.Unchecked ?? "[ ]").Length + 1;
                             checkPrefix = new string(' ', visualWidth);
                         }
                     }
 
-                    string itemColor = isDir ? $"{theme.Primary}" : "";
+
+                    string itemColor = isDir ? ThemeColors.Selector + AnsiColor.Bold : ThemeColors.Selector;
 
                     if (i == cursor)
                     {
-                        buffer.Append($"  {theme.Primary}{theme.Indicator}{theme.Reset} {checkPrefix}{theme.Bold}{itemColor}{displayName}{theme.Reset}\x1b[K\n");
+                        buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{itemColor}{displayName}{ThemeColors.Reset}\x1b[K\n");
                     }
                     else
                     {
-                        string normalStyle = isDir ? $"{theme.Primary}" : $"{theme.Dim}";
-                        buffer.Append($"    {checkPrefix}{normalStyle}{displayName}{theme.Reset}\x1b[K\n");
+                        string normalStyle = isDir ? AnsiColor.White + AnsiColor.Bold : $"{ThemeColors.Dim}";
+                        buffer.Append($"    {checkPrefix}{normalStyle}{displayName}{ThemeColors.Reset}\x1b[K\n");
                     }
                 }
 
@@ -361,19 +362,19 @@ namespace TermFlow.Components.FullScreen
             }
 
             int remaining = entries.Count - end;
-            if (remaining > 0) buffer.Append($"  {theme.Dim}↓ ({remaining} más abajo){theme.Reset}\x1b[K\n");
+            if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
             // Barra de instrucciones dinámica y contextual
             buffer.Append("  ");
             if (isMulti)
             {
-                buffer.Append($"{theme.Warning}Space{theme.Reset} marcar  {theme.Warning}h/j/k/l/←→{theme.Reset} navegar  {theme.Warning}c{theme.Reset} confirmar  {theme.Warning}Esc/q{theme.Reset} salir");
+                buffer.Append($"{ThemeColors.Warning}Space{ThemeColors.Reset} marcar  {ThemeColors.Warning}h/j/k/l/←→{ThemeColors.Reset} navegar  {ThemeColors.Warning}c{ThemeColors.Reset} confirmar  {ThemeColors.Warning}Esc/q{ThemeColors.Reset} salir");
             }
             else
             {
                 string helpKey = filter == ExplorerFilter.OnlyFiles ? "Enter" : "Space/Enter";
-                buffer.Append($"{theme.Warning}{helpKey}{theme.Reset} elegir  {theme.Warning}h/j/k/l/←→{theme.Reset} navegar  {theme.Warning}Esc/q{theme.Reset} salir");
+                buffer.Append($"{ThemeColors.Warning}{helpKey}{ThemeColors.Reset} elegir  {ThemeColors.Warning}h/j/k/l/←→{ThemeColors.Reset} navegar  {ThemeColors.Warning}Esc/q{ThemeColors.Reset} salir");
             }
             buffer.Append("\x1b[K\n");
             buffer.Append("\x1b[K");

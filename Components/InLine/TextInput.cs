@@ -14,10 +14,8 @@ namespace TermFlow.Components.InLine
         /// </summary>
         public static async Task<string> ReadStringAsync(string prompt, CancellationToken token = default)
         {
-            var theme = Engine.Theme;
-
             // Imprimimos el prompt exacto sin espacios agregados artificialmente
-            Console.Write($"{theme.Primary}{prompt}{theme.Reset}");
+            Console.Write(prompt);
 
             StringBuilder inputBuffer = new StringBuilder();
             Console.CursorVisible = true;
@@ -73,8 +71,8 @@ namespace TermFlow.Components.InLine
 
         public static async Task<bool> AskAsync(string prompt)
         {
-            var theme = Engine.Theme;
-            Console.Write($"{theme.Primary}{prompt} {theme.Cyan}[y/n]{theme.Reset} ");
+
+            Console.Write($"{prompt} {AnsiColor.Cyan}[y/n]{ThemeColors.Reset} ");
 
             while (true)
             {
@@ -94,7 +92,7 @@ namespace TermFlow.Components.InLine
 
         public static void PressToContinue(string message = "[Presione cualquier tecla para regresar]")
         {
-            TextViewer.WritePlain($"{Engine.Theme.Dim}  {message}{Engine.Theme.Reset}");
+            TextViewer.WritePlain($"{ThemeColors.Dim}  {message}{ThemeColors.Reset}");
             Console.ReadKey(true);
         }
     }

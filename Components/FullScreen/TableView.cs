@@ -8,9 +8,9 @@ namespace TermFlow.Components.FullScreen
 {
     public static class TableView
     {
-        public static void Show(string[] headers, List<string[]> rows)
+        public static void Show(string[] headers, List<string[]> rows, AnsiColor headerStyle = null)
         {
-            var theme = Engine.Theme;
+
 
             // 1. Cálculos de geometría aislados
             int[] colWidths = CalculateColumnWidths(headers, rows);
@@ -22,11 +22,11 @@ namespace TermFlow.Components.FullScreen
             Console.CursorVisible = false;
 
             // 2. Construcción modular de la estructura
-            AppendBorder(sb, theme.CornerTopLeft, theme.CornerTopRight, totalInnerWidth);
-            AppendHeaderRow(sb, headers, colWidths);
-            AppendBorder(sb, theme.DividerLeft, theme.DividerRight, totalInnerWidth);
+            AppendBorder(sb, ConsoleGlyphs.TopLeft, ConsoleGlyphs.TopRight, totalInnerWidth);
+            AppendHeaderRow(sb, headers, colWidths, headerStyle);
+            AppendBorder(sb, ConsoleGlyphs.Vertical, ConsoleGlyphs.Vertical, totalInnerWidth);
             AppendDataRows(sb, rows, colWidths);
-            AppendBorder(sb, theme.CornerBottomLeft, theme.CornerBottomRight, totalInnerWidth);
+            AppendBorder(sb, ConsoleGlyphs.BottomLeft, ConsoleGlyphs.BottomRight, totalInnerWidth);
 
             sb.Append('\n');
 
@@ -71,44 +71,44 @@ namespace TermFlow.Components.FullScreen
 
         private static void AppendBorder(StringBuilder sb, char cornerLeft, char cornerRight, int width)
         {
-            var theme = Engine.Theme;
-            sb.Append(theme.Dim)
+
+            sb.Append(ThemeColors.Dim)
               .Append(cornerLeft)
-              .Append(new string(theme.BorderHorizontal, width))
+              .Append(new string(ConsoleGlyphs.Horizontal, width))
               .Append(cornerRight)
-              .Append(theme.Reset)
+              .Append(ThemeColors.Reset)
               .Append('\n');
         }
 
-        private static void AppendHeaderRow(StringBuilder sb, string[] headers, int[] colWidths)
+        private static void AppendHeaderRow(StringBuilder sb, string[] headers, int[] colWidths, AnsiColor style = null)
         {
-            var theme = Engine.Theme;
-            sb.Append(theme.Dim).Append(theme.BorderVertical).Append(theme.Reset);
+
+            sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset);
 
             for (int i = 0; i < headers.Length; i++)
             {
                 int visualLength = GetVisualLength(headers[i]);
                 int paddingNeeded = colWidths[i] - visualLength;
                 sb.Append(" ")
-                  .Append(theme.Cyan).Append(theme.Bold)
+                  .Append(style ?? $"{AnsiColor.Cyan}{AnsiColor.Bold}")
                   .Append(headers[i])
                   .Append(new string(' ', paddingNeeded))
-                  .Append(theme.Reset).Append(" ");
+                  .Append(ThemeColors.Reset).Append(" ");
 
                 if (i < headers.Length - 1)
                 {
-                    sb.Append(theme.Dim).Append(theme.BorderVertical).Append(theme.Reset);
+                    sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset);
                 }
             }
-            sb.Append(theme.Dim).Append(theme.BorderVertical).Append(theme.Reset).Append('\n');
+            sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset).Append('\n');
         }
 
         private static void AppendDataRows(StringBuilder sb, List<string[]> rows, int[] colWidths)
         {
-            var theme = Engine.Theme;
+
             foreach (var row in rows)
             {
-                sb.Append(theme.Dim).Append(theme.BorderVertical).Append(theme.Reset);
+                sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset);
 
                 for (int i = 0; i < colWidths.Length; i++)
                 {
@@ -119,10 +119,10 @@ namespace TermFlow.Components.FullScreen
 
                     if (i < colWidths.Length - 1)
                     {
-                        sb.Append(theme.Dim).Append(theme.BorderVertical).Append(theme.Reset);
+                        sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset);
                     }
                 }
-                sb.Append(theme.Dim).Append(theme.BorderVertical).Append(theme.Reset).Append('\n');
+                sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset).Append('\n');
             }
         }
 
