@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using TermFlow.Components.InLine;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
@@ -27,11 +28,11 @@ namespace TermFlow.Components.FullScreen
             AppendDataRows(sb, rows, colWidths);
             AppendBorder(sb, theme.CornerBottomLeft, theme.CornerBottomRight, totalInnerWidth);
 
-            sb.Append('\n').Append(theme.Dim).Append(" Presione cualquier tecla para regresar...").Append(theme.Reset);
+            sb.Append('\n');
 
             // 3. Volcado único a pantalla
             Console.Write(sb.ToString());
-            Console.ReadKey(intercept: true);
+            TextInput.PressToContinue();
 
             Engine.ExitFullScreen();
             Console.CursorVisible = true;

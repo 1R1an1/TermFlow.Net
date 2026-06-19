@@ -91,5 +91,11 @@ namespace TermFlow.Components.InLine
                 }
             }
         }
+
+        public static void PressToContinue(string message = "[Presione cualquier tecla para regresar]")
+        {
+            TextViewer.WritePlain($"{Engine.Theme.Dim}  {message}{Engine.Theme.Reset}");
+            Console.ReadKey(true);
+        }
     }
 }
