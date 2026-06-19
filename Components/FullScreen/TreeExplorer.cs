@@ -298,7 +298,7 @@ namespace TermFlow.Components.FullScreen
 
             // Cabeceras
             buffer.Append($"  {title}\x1b[K\n");
-            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, Math.Max(20, title.Length))}{ThemeColors.Reset}\x1b[K\n");
+            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
             buffer.Append($"  Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}\x1b[K\n");
 
             int end = Math.Min(entries.Count, scroll + visibleRows);

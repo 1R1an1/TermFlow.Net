@@ -23,7 +23,7 @@ namespace TermFlow.Components.InLine
         {
 
             Console.WriteLine(title);
-            Console.WriteLine($"{ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.Length)}{ThemeColors.Reset}");
+            Console.WriteLine($"{ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}");
         }
     }
 }

@@ -253,7 +253,7 @@ namespace TermFlow.Components.FullScreen
 
             // Cabecera
             buffer.Append($"  {title}\x1b[K\n");
-            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, Math.Max(20, title.Length))}{ThemeColors.Reset}\x1b[K\n");
+            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
 
             // Input de búsqueda predictiva (Ya no tiene el \n extra abajo, se une directo al indicador)
             buffer.Append($"  Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}_\x1b[K\n");

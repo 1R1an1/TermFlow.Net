@@ -199,7 +199,7 @@ namespace TermFlow.Components.FullScreen
 
             // Cabecera optimizada: quitamos el \n extra. Agregamos \x1b[K para limpiar fantasmas.
             buffer.Append($"  {title}\x1b[K\n");
-            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, Math.Max(20, title.Length))}{ThemeColors.Reset}\x1b[K\n");
+            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
 
             int end = Math.Min(items.Length, scroll + visibleRows);
 

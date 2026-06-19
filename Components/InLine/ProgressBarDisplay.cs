@@ -71,7 +71,7 @@ namespace TermFlow.Components.InLine
                         string colEta = $" [{FormatEta(currentVal, maxValue, displaySpeed)}] ";
 
                         // Calcular espacio disponible para la barra de progreso de forma dinámica
-                        int metaWidth = GetVisualLength(colDesc) + GetVisualLength(colPercent) + GetVisualLength(colSpeed) + GetVisualLength(colEta) + 2;
+                        int metaWidth = colDesc.GetVisualLength() + colPercent.GetVisualLength() + colSpeed.GetVisualLength() + colEta.GetVisualLength() + 2;
                         int barWidth = fixedBarWidth ?? Math.Max(10, Console.WindowWidth - metaWidth);
 
                         int filledBlocks = (int)Math.Round(percentage * barWidth);
@@ -147,11 +147,5 @@ namespace TermFlow.Components.InLine
             TimeSpan time = TimeSpan.FromSeconds(secondsLeft);
             return $"{((int)time.TotalHours):D2}:{time.Minutes:D2}:{time.Seconds:D2}";
         }
-
-        private static int GetVisualLength(string text)
-        {
-            return System.Text.RegularExpressions.Regex.Replace(text, @"\x1b\[[^m]*m", "").Length;
-        }
-
     }
 }

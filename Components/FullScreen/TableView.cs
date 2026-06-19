@@ -50,9 +50,9 @@ namespace TermFlow.Components.FullScreen
             {
                 for (int i = 0; i < widths.Length; i++)
                 {
-                    if (i < row.Length && GetVisualLength(row[i]) > widths[i])
+                    if (i < row.Length && row[i].GetVisualLength() > widths[i])
                     {
-                        widths[i] = GetVisualLength(row[i]);
+                        widths[i] = row[i].GetVisualLength();
                     }
                 }
             }
@@ -87,7 +87,7 @@ namespace TermFlow.Components.FullScreen
 
             for (int i = 0; i < headers.Length; i++)
             {
-                int visualLength = GetVisualLength(headers[i]);
+                int visualLength = headers[i].GetVisualLength();
                 int paddingNeeded = colWidths[i] - visualLength;
                 sb.Append(" ")
                   .Append(style ?? $"{AnsiColor.Cyan}{AnsiColor.Bold}")
@@ -113,7 +113,7 @@ namespace TermFlow.Components.FullScreen
                 for (int i = 0; i < colWidths.Length; i++)
                 {
                     string value = i < row.Length ? row[i] : "";
-                    int visualLength = GetVisualLength(value);
+                    int visualLength = value.GetVisualLength();
                     int paddingNeeded = colWidths[i] - visualLength;
                     sb.Append(" ").Append(value).Append(new string(' ', paddingNeeded)).Append(" ");
 
@@ -124,11 +124,6 @@ namespace TermFlow.Components.FullScreen
                 }
                 sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset).Append('\n');
             }
-        }
-
-        private static int GetVisualLength(string text)
-        {
-            return System.Text.RegularExpressions.Regex.Replace(text, @"\x1b\[[^m]*m", "").Length;
         }
     }
 }
