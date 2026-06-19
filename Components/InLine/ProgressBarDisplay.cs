@@ -34,6 +34,10 @@ namespace TermFlow.Components.InLine
             Console.CursorVisible = false;
 
             var stopwatch = Stopwatch.StartNew();
+            long lastValue = 0;
+            double lastTime = 0;
+            double lastSpeed = 0;
+
             Task renderTask = Task.Run(async () =>
             {
                 try
@@ -43,10 +47,13 @@ namespace TermFlow.Components.InLine
                     while (!internalCts.Token.IsCancellationRequested)
                     {
                         long currentVal = Interlocked.Read(ref taskState._value);
+                        double currentTime = stopwatch.Elapsed.TotalSeconds;
 
                         // Cálculo automático de velocidad (unidades por segundo)
-                        double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
-                        double currentSpeed = elapsedSeconds > 0.1 ? (double)currentVal / elapsedSeconds : 0;
+                        double currentSpeed = currentTime > lastTime && currentTime - lastTime > 0 ? (currentVal - lastValue) / (currentTime - lastTime) : 0;
+
+                        // Usa la última velocidad válida si está trancado
+                        double displaySpeed = currentSpeed > 0 ? currentSpeed : lastSpeed;
 
                         double percentage = maxValue > 0 ? (double)currentVal / maxValue : 0;
                         if (percentage > 1.0) percentage = 1.0;
@@ -58,10 +65,10 @@ namespace TermFlow.Components.InLine
                         string colPercent = $" {(int)(percentage * 100)}% ";
 
                         // 3. Columna Velocidad (Condicional)
-                        string colSpeed = showSpeed ? $" {FormatDecimalSpeed(currentSpeed)} " : string.Empty;
+                        string colSpeed = showSpeed ? $" {FormatDecimalSpeed(displaySpeed)} " : string.Empty;
 
                         // 4. Columna Tiempo Restante (ETA)
-                        string colEta = $" [{FormatEta(currentVal, maxValue, currentSpeed)}] ";
+                        string colEta = $" [{FormatEta(currentVal, maxValue, displaySpeed)}] ";
 
                         // Calcular espacio disponible para la barra de progreso de forma dinámica
                         int metaWidth = GetVisualLength(colDesc) + GetVisualLength(colPercent) + GetVisualLength(colSpeed) + GetVisualLength(colEta) + 2;
@@ -87,6 +94,13 @@ namespace TermFlow.Components.InLine
                         Console.Write(lineBuffer.ToString());
 
                         await Task.Delay(50, internalCts.Token);
+
+                        if (currentSpeed > 0)  // ← Solo actualiza si hubo movimiento
+                        {
+                            lastValue = currentVal;
+                            lastTime = currentTime;
+                            lastSpeed = currentSpeed;
+                        }
                     }
                 }
                 catch (OperationCanceledException)
