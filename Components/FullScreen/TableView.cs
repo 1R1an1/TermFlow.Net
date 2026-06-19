@@ -49,9 +49,9 @@ namespace TermFlow.Components.FullScreen
             {
                 for (int i = 0; i < widths.Length; i++)
                 {
-                    if (i < row.Length && row[i].Length > widths[i])
+                    if (i < row.Length && GetVisualLength(row[i]) > widths[i])
                     {
-                        widths[i] = row[i].Length;
+                        widths[i] = GetVisualLength(row[i]);
                     }
                 }
             }
@@ -86,9 +86,12 @@ namespace TermFlow.Components.FullScreen
 
             for (int i = 0; i < headers.Length; i++)
             {
+                int visualLength = GetVisualLength(headers[i]);
+                int paddingNeeded = colWidths[i] - visualLength;
                 sb.Append(" ")
                   .Append(theme.Cyan).Append(theme.Bold)
-                  .Append(headers[i].PadRight(colWidths[i]))
+                  .Append(headers[i])
+                  .Append(new string(' ', paddingNeeded))
                   .Append(theme.Reset).Append(" ");
 
                 if (i < headers.Length - 1)
@@ -109,7 +112,9 @@ namespace TermFlow.Components.FullScreen
                 for (int i = 0; i < colWidths.Length; i++)
                 {
                     string value = i < row.Length ? row[i] : "";
-                    sb.Append(" ").Append(value.PadRight(colWidths[i])).Append(" ");
+                    int visualLength = GetVisualLength(value);
+                    int paddingNeeded = colWidths[i] - visualLength;
+                    sb.Append(" ").Append(value).Append(new string(' ', paddingNeeded)).Append(" ");
 
                     if (i < colWidths.Length - 1)
                     {
@@ -118,6 +123,11 @@ namespace TermFlow.Components.FullScreen
                 }
                 sb.Append(theme.Dim).Append(theme.BorderVertical).Append(theme.Reset).Append('\n');
             }
+        }
+
+        private static int GetVisualLength(string text)
+        {
+            return System.Text.RegularExpressions.Regex.Replace(text, @"\x1b\[[^m]*m", "").Length;
         }
     }
 }
