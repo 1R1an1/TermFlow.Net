@@ -10,7 +10,7 @@ namespace TermFlow.Components.FullScreen
     public static class SearchList
     {
         // Reducido a 7 tras eliminar la línea en blanco sobrante debajo del cuadro de búsqueda
-        private const int ReservedRows = 7;
+        private const int ReservedRows = 8;
 
         /// <summary>
         /// Buscador de selección ÚNICA. Retorna el índice original del elemento o -1 si cancela.
@@ -252,6 +252,7 @@ namespace TermFlow.Components.FullScreen
             buffer.Append("\x1b[H");
 
             // Cabecera
+            buffer.Append("\x1b[K\n");
             buffer.Append($"  {title}\x1b[K\n");
             buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
 

@@ -18,7 +18,7 @@ namespace TermFlow.Components.FullScreen
 
     public static class TreeExplorer
     {
-        private const int ReservedRows = 7;
+        private const int ReservedRows = 8;
 
         /// <summary>
         /// Explora el sistema de archivos para seleccionar una ÚNICA opción (Carpeta o Archivo según el filtro).
@@ -297,6 +297,7 @@ namespace TermFlow.Components.FullScreen
             buffer.Clear().Append("\x1b[H");
 
             // Cabeceras
+            buffer.Append("\x1b[K\n");
             buffer.Append($"  {title}\x1b[K\n");
             buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
             buffer.Append($"  Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}\x1b[K\n");

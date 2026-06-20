@@ -90,10 +90,10 @@ namespace TermFlow.Components.InLine
             }
         }
 
-        public static void PressToContinue(string message = "[Presione cualquier tecla para regresar]")
+        public static void PressToContinue(string message = "[Presiona enter para regresar]")
         {
             TextViewer.WritePlain($"{ThemeColors.Dim}  {message}{ThemeColors.Reset}");
-            Console.ReadKey(true);
+            while (Console.ReadKey(true).Key != ConsoleKey.Enter) { }
         }
     }
 }

@@ -10,7 +10,7 @@ namespace TermFlow.Components.FullScreen
     public static class Menu
     {
         // FIX: Cambiado a 6 para empujar las instrucciones hacia arriba y dejar la última línea libre
-        private const int ReservedRows = 6;
+        private const int ReservedRows = 7;
 
         public static async Task<int> SelectOneAsync(string title, string[] items, CancellationToken token = default)
         {
@@ -198,6 +198,7 @@ namespace TermFlow.Components.FullScreen
             buffer.Append("\x1b[H");
 
             // Cabecera optimizada: quitamos el \n extra. Agregamos \x1b[K para limpiar fantasmas.
+            buffer.Append("\x1b[K\n");
             buffer.Append($"  {title}\x1b[K\n");
             buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
 
