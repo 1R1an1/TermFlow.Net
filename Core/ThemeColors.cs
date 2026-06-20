@@ -5,6 +5,7 @@ public static class ThemeColors
     public static AnsiColor Selector { get; set; } = AnsiColor.BrightMagenta;
 
     public static AnsiColor Primary { get; set; } = AnsiColor.Magenta + AnsiColor.Bold;
+    public static AnsiColor Bright { get; set; } = AnsiColor.BrightWhite + AnsiColor.Bold;
 
     public static AnsiColor Success { get; set; } = AnsiColor.Green;
 
