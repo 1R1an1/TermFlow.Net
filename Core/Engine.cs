@@ -67,6 +67,8 @@ public static class Engine
         }
     }
 
+    public static void AlternateBuffer(bool active) => Console.Write(active ? "\x1b[?1049h\x1b[2J" : "\x1b[?1049l");
+
     public static void ExitFullScreen()
     {
         // Secuencia de restauración total:
