@@ -1,8 +1,8 @@
 using System;
-using System.IO;
-using System.Text;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Core;
@@ -17,7 +17,7 @@ namespace TermFlow.Components.FullScreen
     }
 
     /// <summary>
-    /// Estructura de rendimiento empaquetada en memoria (0 allocations en Heap por elemento).
+    /// Tipo de valor compacto para minimizar objetos auxiliares durante renderizado y navegación.
     /// </summary>
     public readonly struct ExplorerEntry
     {
@@ -33,23 +33,39 @@ namespace TermFlow.Components.FullScreen
         }
     }
 
+    #region Interfaces públicas del origen de datos
+
+    public interface IExplorerDataSource
+    {
+        string RootPath { get; }
+        bool IsDirectory(string id);
+        string GetParent(string id);
+        string GetSubPathPrefix(string id);
+        List<ExplorerEntry> FetchAndSortEntries(string id);
+        /// <summary>
+        /// Implementación opcional optimizada para la resolución de marcados.
+        /// Si no se implementa (devuelve null), el motor usará la versión genérica.
+        /// </summary>
+        string[] ResolveMarkedEntries(HashSet<string> marked, HashSet<string> unmarkedExceptions, ExplorerFilter filter) => null;
+    }
+
+    /// <summary>
+    /// Extensión opcional para proveedores que realizan I/O asíncrona (red, etc.).
+    /// El motor usará automáticamente esta versión si está disponible.
+    /// </summary>
+    public interface IAsyncExplorerDataSource : IExplorerDataSource
+    {
+        ValueTask<List<ExplorerEntry>> FetchAndSortEntriesAsync(string id, CancellationToken token);
+    }
+
+    #endregion
+
     public static class TreeExplorer
     {
         private const int ReservedRows = 8;
 
-        #region Abstracción de Origen de Datos
+        #region Proveedores concretos (internos)
 
-        private interface IExplorerDataSource
-        {
-            string RootPath { get; }
-            bool IsDirectory(string id);
-            string GetParent(string id);
-            string GetSubPathPrefix(string id);
-            List<ExplorerEntry> FetchAndSortEntries(string id);
-            string[] ResolveMarkedEntries(HashSet<string> marked, HashSet<string> unmarkedExceptions, ExplorerFilter filter);
-        }
-
-        // Proveedor Físico (Optimizado para un solo viaje al disco por navegación)
         private sealed class PhysicalDataSource : IExplorerDataSource
         {
             public string RootPath { get; }
@@ -57,7 +73,6 @@ namespace TermFlow.Components.FullScreen
 
             public bool IsDirectory(string id) => Directory.Exists(id);
             public string GetParent(string id) => Directory.GetParent(id)?.FullName ?? string.Empty;
-
             public string GetSubPathPrefix(string id) =>
                 id.EndsWith(Path.DirectorySeparatorChar) ? id : id + Path.DirectorySeparatorChar;
 
@@ -67,17 +82,13 @@ namespace TermFlow.Components.FullScreen
                 try
                 {
                     var di = new DirectoryInfo(id);
-                    if (di.Exists)
-                    {
-                        // GetFileSystemInfos recupera metadatos de archivos y carpetas en UNA SOLA llamada al SO
-                        var infos = di.GetFileSystemInfos()
-                                      .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
+                    if (!di.Exists) return list;
 
-                        foreach (var info in infos)
-                        {
-                            bool isDir = (info.Attributes & FileAttributes.Directory) == FileAttributes.Directory;
-                            list.Add(new ExplorerEntry(info.FullName, info.Name, isDir));
-                        }
+                    var infos = di.GetFileSystemInfos().OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
+                    foreach (var info in infos)
+                    {
+                        bool isDir = (info.Attributes & FileAttributes.Directory) == FileAttributes.Directory;
+                        list.Add(new ExplorerEntry(info.FullName, info.Name, isDir));
                     }
                 }
                 catch (UnauthorizedAccessException) { }
@@ -85,25 +96,22 @@ namespace TermFlow.Components.FullScreen
                 return list;
             }
 
+            // Versión optimizada que no re‑escaneará el disco
             public string[] ResolveMarkedEntries(HashSet<string> marked, HashSet<string> unmarkedExceptions, ExplorerFilter filter)
             {
                 var resolved = new List<string>();
                 foreach (var path in marked)
-                {
-                    if (File.Exists(path))
-                    {
+                    if (!IsDirectory(path))
                         if (filter != ExplorerFilter.OnlyFolders && IsPathMarked(path, marked, unmarkedExceptions, this))
                             resolved.Add(path);
-                    }
-                    else if (Directory.Exists(path))
-                    {
-                        TraverseAndResolve(path, filter, marked, unmarkedExceptions, resolved);
-                    }
-                }
-                return resolved.Distinct().OrderBy(p => p).ToArray();
+                        else
+                            TraversePhysical(path, filter, marked, unmarkedExceptions, resolved);
+
+                return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
             }
 
-            private void TraverseAndResolve(string dir, ExplorerFilter filter, HashSet<string> marked, HashSet<string> unmarkedExceptions, List<string> resolved)
+            private void TraversePhysical(string dir, ExplorerFilter filter,
+                HashSet<string> marked, HashSet<string> unmarkedExceptions, List<string> resolved)
             {
                 if (!IsPathMarked(dir, marked, unmarkedExceptions, this)) return;
                 if (filter != ExplorerFilter.OnlyFiles) resolved.Add(dir);
@@ -111,75 +119,56 @@ namespace TermFlow.Components.FullScreen
                 try
                 {
                     if (filter != ExplorerFilter.OnlyFolders)
-                    {
                         foreach (var file in Directory.GetFiles(dir))
-                        {
-                            if (IsPathMarked(file, marked, unmarkedExceptions, this)) resolved.Add(file);
-                        }
-                    }
+                            if (IsPathMarked(file, marked, unmarkedExceptions, this))
+                                resolved.Add(file);
+
                     foreach (var subDir in Directory.GetDirectories(dir))
-                    {
-                        TraverseAndResolve(subDir, filter, marked, unmarkedExceptions, resolved);
-                    }
+                        TraversePhysical(subDir, filter, marked, unmarkedExceptions, resolved);
                 }
                 catch { }
             }
         }
 
-        // Proveedor Virtual (Construcción O(N) en instanciación, O(1) en navegación)
         private sealed class VirtualDataSource : IExplorerDataSource
         {
             private readonly Dictionary<string, List<ExplorerEntry>> _hierarchy = new(StringComparer.OrdinalIgnoreCase);
-            private readonly Dictionary<string, string> _parents = new(StringComparer.OrdinalIgnoreCase);
             private readonly HashSet<string> _globalDirs = new(StringComparer.OrdinalIgnoreCase);
 
             public string RootPath { get; }
-
             public VirtualDataSource(IEnumerable<string> paths, string virtualRoot)
             {
-                // Normalización robusta contra raíces vacías o "/"
                 string cleanRoot = virtualRoot.Replace('\\', '/').Trim('/');
                 RootPath = string.IsNullOrEmpty(cleanRoot) ? "/" : "/" + cleanRoot;
-
                 _globalDirs.Add(RootPath);
 
                 var structuralHierarchy = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-                var rawFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
                 foreach (var rawPath in paths)
                 {
                     if (string.IsNullOrWhiteSpace(rawPath)) continue;
-
                     string cleanPath = rawPath.Replace('\\', '/').Trim('/');
                     if (string.IsNullOrEmpty(cleanPath)) continue;
 
                     string[] segments = cleanPath.Split('/');
                     string current = RootPath;
-
                     for (int i = 0; i < segments.Length; i++)
                     {
                         string segment = segments[i];
                         string next = current == "/" ? $"/{segment}" : $"{current}/{segment}";
-
-                        bool isLast = (i == segments.Length - 1);
+                        bool isLast = i == segments.Length - 1;
                         bool isExplicitDir = isLast && (rawPath.EndsWith('/') || rawPath.EndsWith('\\'));
 
                         if (!isLast || isExplicitDir) _globalDirs.Add(next);
-                        else rawFiles.Add(next);
-
                         if (!structuralHierarchy.TryGetValue(current, out var children))
                         {
                             children = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                             structuralHierarchy[current] = children;
                         }
                         children.Add(next);
-
-                        _parents[next] = current;
                         current = next;
                     }
                 }
 
-                // Congelamos la estructura en Listas de ExplorerEntry optimizadas para lectura directa
                 foreach (var kvp in structuralHierarchy)
                 {
                     var entriesList = new List<ExplorerEntry>();
@@ -194,98 +183,160 @@ namespace TermFlow.Components.FullScreen
             }
 
             public bool IsDirectory(string id) => _globalDirs.Contains(id);
-            public string GetParent(string id) => _parents.TryGetValue(id, out var parent) ? parent : string.Empty;
+            public string GetParent(string id)
+            {
+                // Lógica específica para rutas virtuales con '/'
+                if (string.IsNullOrEmpty(id) || id == RootPath) return string.Empty;
+                int idx = id.LastIndexOf('/');
+                if (idx <= 0) return RootPath;
+                string parent = id.Substring(0, idx);
+                return string.IsNullOrEmpty(parent) ? "/" : parent;
+            }
             public string GetSubPathPrefix(string id) => id.EndsWith('/') ? id : id + "/";
 
             public List<ExplorerEntry> FetchAndSortEntries(string id) =>
                 _hierarchy.TryGetValue(id, out var list) ? list : new List<ExplorerEntry>();
 
+            // Versión optimizada que usa la jerarquía en memoria
             public string[] ResolveMarkedEntries(HashSet<string> marked, HashSet<string> unmarkedExceptions, ExplorerFilter filter)
             {
                 var resolved = new List<string>();
                 foreach (var path in marked)
-                {
                     if (!_globalDirs.Contains(path))
-                    {
                         if (filter != ExplorerFilter.OnlyFolders && IsPathMarked(path, marked, unmarkedExceptions, this))
                             resolved.Add(path);
-                    }
-                    else
-                    {
-                        TraverseAndResolve(path, filter, marked, unmarkedExceptions, resolved);
-                    }
-                }
-                return resolved.Distinct().OrderBy(p => p).ToArray();
+                        else
+                            TraverseVirtual(path, filter, marked, unmarkedExceptions, resolved);
+
+
+                return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
             }
 
-            private void TraverseAndResolve(string dir, ExplorerFilter filter, HashSet<string> marked, HashSet<string> unmarkedExceptions, List<string> resolved)
+            private void TraverseVirtual(string dir, ExplorerFilter filter,
+                HashSet<string> marked, HashSet<string> unmarkedExceptions, List<string> resolved)
             {
                 if (!IsPathMarked(dir, marked, unmarkedExceptions, this)) return;
                 if (filter != ExplorerFilter.OnlyFiles) resolved.Add(dir);
 
                 if (_hierarchy.TryGetValue(dir, out var children))
-                {
                     foreach (var child in children)
-                    {
                         if (!child.IsDirectory)
-                        {
                             if (filter != ExplorerFilter.OnlyFolders && IsPathMarked(child.Id, marked, unmarkedExceptions, this))
                                 resolved.Add(child.Id);
-                        }
-                        else
-                        {
-                            TraverseAndResolve(child.Id, filter, marked, unmarkedExceptions, resolved);
-                        }
-                    }
+                            else
+                                TraverseVirtual(child.Id, filter, marked, unmarkedExceptions, resolved);
+            }
+        }
+
+        #endregion
+
+        #region Lógica universal de selección (estática, agnóstica al origen)
+
+        private static bool IsPathMarked(string path, HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource source)
+        {
+            string current = path;
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (unmarkedExceptions.Contains(current)) return false;
+                if (marked.Contains(current)) return true;
+                current = source.GetParent(current);
+            }
+            return marked.Contains(source.RootPath);
+        }
+
+        private static void ToggleSelection(string path, HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource source)
+        {
+            bool currentlyMarked = IsPathMarked(path, marked, unmarkedExceptions, source);
+            string prefix = source.GetSubPathPrefix(path);
+
+            if (currentlyMarked)
+            {
+                if (marked.Contains(path)) marked.Remove(path);
+                else unmarkedExceptions.Add(path);
+            }
+            else
+            {
+                if (unmarkedExceptions.Contains(path)) unmarkedExceptions.Remove(path);
+                else marked.Add(path);
+            }
+
+            marked.RemoveWhere(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            unmarkedExceptions.RemoveWhere(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string[] ResolveMarkedEntriesUniversal(IExplorerDataSource source, HashSet<string> marked, HashSet<string> unmarkedExceptions, ExplorerFilter filter)
+        {
+            var resolved = new List<string>();
+            foreach (var path in marked)
+            {
+                if (!source.IsDirectory(path))
+                {
+                    if (filter != ExplorerFilter.OnlyFolders && IsPathMarked(path, marked, unmarkedExceptions, source))
+                        resolved.Add(path);
+                }
+                else
+                {
+                    TraverseUniversal(path, source, filter, marked, unmarkedExceptions, resolved);
+                }
+            }
+            return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
+        }
+
+        private static void TraverseUniversal(string dir, IExplorerDataSource source, ExplorerFilter filter,
+            HashSet<string> marked, HashSet<string> unmarkedExceptions, List<string> resolved)
+        {
+            if (!IsPathMarked(dir, marked, unmarkedExceptions, source)) return;
+            if (filter != ExplorerFilter.OnlyFiles) resolved.Add(dir);
+
+            var children = source.FetchAndSortEntries(dir);
+            foreach (var child in children)
+            {
+                if (!child.IsDirectory)
+                {
+                    if (filter != ExplorerFilter.OnlyFolders && IsPathMarked(child.Id, marked, unmarkedExceptions, source))
+                        resolved.Add(child.Id);
+                }
+                else
+                {
+                    TraverseUniversal(child.Id, source, filter, marked, unmarkedExceptions, resolved);
                 }
             }
         }
 
         #endregion
 
-        #region API Pública (Overloads Limpios)
+        #region API pública
 
         public static async Task<string> ExploreOneAsync(string title, string rootDir, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
-        {
-            Engine.EnterFullScreen();
-            try
-            {
-                var result = await InternalExploreAsync(title, new PhysicalDataSource(rootDir), isMulti: false, filter, token);
-                return result.FirstOrDefault() ?? string.Empty;
-            }
-            catch (OperationCanceledException) { return string.Empty; }
-            finally { Engine.ExitFullScreen(); }
-        }
+            => await ExploreOneAsync(title, new PhysicalDataSource(rootDir), filter, token);
 
         public static async Task<string[]> ExploreMultiAsync(string title, string rootDir, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
-        {
-            Engine.EnterFullScreen();
-            try
-            {
-                return await InternalExploreAsync(title, new PhysicalDataSource(rootDir), isMulti: true, filter, token);
-            }
-            catch (OperationCanceledException) { return Array.Empty<string>(); }
-            finally { Engine.ExitFullScreen(); }
-        }
+            => await ExploreMultiAsync(title, new PhysicalDataSource(rootDir), filter, token);
 
         public static async Task<string> ExploreOneAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
+            => await ExploreOneAsync(title, new VirtualDataSource(virtualPaths, virtualRoot), filter, token);
+
+        public static async Task<string[]> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
+            => await ExploreMultiAsync(title, new VirtualDataSource(virtualPaths, virtualRoot), filter, token);
+
+        public static async Task<string> ExploreOneAsync(string title, IExplorerDataSource dataSource, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
             try
             {
-                var result = await InternalExploreAsync(title, new VirtualDataSource(virtualPaths, virtualRoot), isMulti: false, filter, token);
+                var result = await InternalExploreAsync(title, dataSource, isMulti: false, filter, token);
                 return result.FirstOrDefault() ?? string.Empty;
             }
             catch (OperationCanceledException) { return string.Empty; }
             finally { Engine.ExitFullScreen(); }
         }
 
-        public static async Task<string[]> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
+        public static async Task<string[]> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
             try
             {
-                return await InternalExploreAsync(title, new VirtualDataSource(virtualPaths, virtualRoot), isMulti: true, filter, token);
+                return await InternalExploreAsync(title, dataSource, isMulti: true, filter, token);
             }
             catch (OperationCanceledException) { return Array.Empty<string>(); }
             finally { Engine.ExitFullScreen(); }
@@ -293,21 +344,28 @@ namespace TermFlow.Components.FullScreen
 
         #endregion
 
-        #region Motor Reactor Centralizado
+        #region Motor central
+
+        private static async Task<List<ExplorerEntry>> FetchEntriesAsync(IExplorerDataSource dataSource, string nodeId, CancellationToken token)
+        {
+            if (dataSource is IAsyncExplorerDataSource asyncSource)
+                return await asyncSource.FetchAndSortEntriesAsync(nodeId, token);
+            // Fuentes síncronas (disco/virtual) son inmediatas, no necesitan Task.Run
+            return dataSource.FetchAndSortEntries(nodeId);
+        }
 
         private static async Task<string[]> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerFilter filter, CancellationToken token)
         {
             string currentNode = dataSource.RootPath;
             int cursor = 0;
             StringBuilder buffer = new StringBuilder(4096);
-
             ScrollState layout = new ScrollState();
             bool shouldRender = true;
 
             HashSet<string> marked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             HashSet<string> unmarkedExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            List<ExplorerEntry> entries = dataSource.FetchAndSortEntries(currentNode);
+            List<ExplorerEntry> entries = await FetchEntriesAsync(dataSource, currentNode, token);
 
             while (!token.IsCancellationRequested)
             {
@@ -338,7 +396,9 @@ namespace TermFlow.Components.FullScreen
 
                         if (isMulti && (key.KeyChar == 'c' || key.KeyChar == 'C'))
                         {
-                            return dataSource.ResolveMarkedEntries(marked, unmarkedExceptions, filter);
+                            // Usa la versión optimizada si el datasource la provee
+                            var optimized = dataSource.ResolveMarkedEntries(marked, unmarkedExceptions, filter);
+                            return optimized ?? ResolveMarkedEntriesUniversal(dataSource, marked, unmarkedExceptions, filter);
                         }
 
                         if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
@@ -354,16 +414,16 @@ namespace TermFlow.Components.FullScreen
                             if (entries.Count > 0)
                             {
                                 ExplorerEntry selected = entries[cursor];
-
                                 if (selected.IsDirectory && key.Key != ConsoleKey.Spacebar)
                                 {
                                     currentNode = selected.Id;
-                                    entries = dataSource.FetchAndSortEntries(currentNode);
+                                    entries = await FetchEntriesAsync(dataSource, currentNode, token);
                                     cursor = 0;
                                 }
                                 else if (!isMulti)
                                 {
-                                    if (!selected.IsDirectory && filter != ExplorerFilter.OnlyFolders) return new[] { selected.Id };
+                                    if (!selected.IsDirectory && filter != ExplorerFilter.OnlyFolders)
+                                        return new[] { selected.Id };
                                 }
                             }
                         }
@@ -373,14 +433,13 @@ namespace TermFlow.Components.FullScreen
                             if (!string.IsNullOrEmpty(parent))
                             {
                                 currentNode = parent;
-                                entries = dataSource.FetchAndSortEntries(currentNode);
+                                entries = await FetchEntriesAsync(dataSource, currentNode, token);
                                 cursor = 0;
                             }
                         }
                         else if (key.Key == ConsoleKey.Spacebar && entries.Count > 0)
                         {
                             ExplorerEntry target = entries[cursor];
-
                             if (!isMulti)
                             {
                                 if (target.IsDirectory && filter != ExplorerFilter.OnlyFiles) return new[] { target.Id };
@@ -390,7 +449,6 @@ namespace TermFlow.Components.FullScreen
                             {
                                 if (filter == ExplorerFilter.OnlyFolders && !target.IsDirectory) continue;
                                 if (filter == ExplorerFilter.OnlyFiles && target.IsDirectory) continue;
-
                                 ToggleSelection(target.Id, marked, unmarkedExceptions, dataSource);
                             }
                         }
@@ -411,42 +469,9 @@ namespace TermFlow.Components.FullScreen
             return Array.Empty<string>();
         }
 
-        private static bool IsPathMarked(string path, HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource)
-        {
-            string current = path;
-            while (!string.IsNullOrEmpty(current))
-            {
-                if (unmarkedExceptions.Contains(current)) return false;
-                if (marked.Contains(current)) return true;
-                current = dataSource.GetParent(current);
-            }
-            return false;
-        }
-
-        private static void ToggleSelection(string path, HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource)
-        {
-            bool currentlyMarked = IsPathMarked(path, marked, unmarkedExceptions, dataSource);
-            string subPathPrefix = dataSource.GetSubPathPrefix(path);
-
-            if (currentlyMarked)
-            {
-                if (marked.Contains(path)) marked.Remove(path);
-                else unmarkedExceptions.Add(path);
-
-                marked.RemoveWhere(p => p.StartsWith(subPathPrefix, StringComparison.OrdinalIgnoreCase));
-                unmarkedExceptions.RemoveWhere(p => p.StartsWith(subPathPrefix, StringComparison.OrdinalIgnoreCase));
-            }
-            else
-            {
-                if (unmarkedExceptions.Contains(path)) unmarkedExceptions.Remove(path);
-                else marked.Add(path);
-
-                marked.RemoveWhere(p => p.StartsWith(subPathPrefix, StringComparison.OrdinalIgnoreCase));
-                unmarkedExceptions.RemoveWhere(p => p.StartsWith(subPathPrefix, StringComparison.OrdinalIgnoreCase));
-            }
-        }
-
-        private static void RenderTree(StringBuilder buffer, string title, string currentDir, List<ExplorerEntry> entries, int cursor, int scroll, int visibleRows, bool isMulti, ExplorerFilter filter, HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource)
+        private static void RenderTree(StringBuilder buffer, string title, string currentDir, List<ExplorerEntry> entries,
+            int cursor, int scroll, int visibleRows, bool isMulti, ExplorerFilter filter,
+            HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource)
         {
             buffer.Clear().Append("\x1b[H");
 
@@ -505,7 +530,7 @@ namespace TermFlow.Components.FullScreen
                     }
                 }
 
-                for (int i = (end - scroll); i < visibleRows; i++) buffer.Append("\x1b[K\n");
+                for (int i = end - scroll; i < visibleRows; i++) buffer.Append("\x1b[K\n");
             }
 
             int remaining = entries.Count - end;
