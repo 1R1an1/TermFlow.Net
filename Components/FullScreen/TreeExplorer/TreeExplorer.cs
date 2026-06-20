@@ -91,35 +91,35 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         #region API pública
 
         public static async Task<string> ExploreOneAsync(string title, string rootDir, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
-            => await ExploreOneAsync(title, new PhysicalDataSource(rootDir), filter, token);
+            => await ExploreOneAsync(title, dataSource: new PhysicalDataSource(rootDir), filter, token: token);
 
         public static async Task<string[]> ExploreMultiAsync(string title, string rootDir, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
-            => await ExploreMultiAsync(title, new PhysicalDataSource(rootDir), filter, token);
+            => await ExploreMultiAsync(title, dataSource: new PhysicalDataSource(rootDir), filter, token: token);
 
         public static async Task<string> ExploreOneAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
-            => await ExploreOneAsync(title, new VirtualDataSource(virtualPaths, virtualRoot), filter, token);
+            => await ExploreOneAsync(title, dataSource: new VirtualDataSource(virtualPaths, virtualRoot), filter, token: token);
 
         public static async Task<string[]> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
-            => await ExploreMultiAsync(title, new VirtualDataSource(virtualPaths, virtualRoot), filter, token);
+            => await ExploreMultiAsync(title, dataSource: new VirtualDataSource(virtualPaths, virtualRoot), filter, token: token);
 
-        public static async Task<string> ExploreOneAsync(string title, IExplorerDataSource dataSource, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
+        public static async Task<string> ExploreOneAsync(string title, IExplorerDataSource dataSource, ExplorerFilter filter = ExplorerFilter.All, string initialPath = null, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
             try
             {
-                var result = await InternalExploreAsync(title, dataSource, isMulti: false, filter, token);
+                var result = await InternalExploreAsync(title, dataSource, isMulti: false, filter, initialPath, token);
                 return result.FirstOrDefault() ?? string.Empty;
             }
             catch (OperationCanceledException) { return string.Empty; }
             finally { Engine.ExitFullScreen(); }
         }
 
-        public static async Task<string[]> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerFilter filter = ExplorerFilter.All, CancellationToken token = default)
+        public static async Task<string[]> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerFilter filter = ExplorerFilter.All, string initialPath = null, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
             try
             {
-                return await InternalExploreAsync(title, dataSource, isMulti: true, filter, token);
+                return await InternalExploreAsync(title, dataSource, isMulti: true, filter, initialPath, token);
             }
             catch (OperationCanceledException) { return Array.Empty<string>(); }
             finally { Engine.ExitFullScreen(); }
@@ -137,9 +137,10 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             return dataSource.FetchAndSortEntries(nodeId);
         }
 
-        private static async Task<string[]> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerFilter filter, CancellationToken token)
+        private static async Task<string[]> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerFilter filter, string initialPath, CancellationToken token)
         {
-            string currentNode = dataSource.RootPath;
+            // Si mandas una ruta inicial arranca ahí, si no, usa la raíz del origen de datos
+            string currentNode = !string.IsNullOrEmpty(initialPath) ? Path.Combine(dataSource.RootPath, initialPath) : dataSource.RootPath;
             int cursor = 0;
             StringBuilder buffer = new StringBuilder(4096);
             ScrollState layout = new ScrollState();
