@@ -60,3 +60,8 @@ dotnet build -c Release
 ⚠️ **Importante**: Al ser una biblioteca enfocada en la manipulación directa del buffer de la consola, el comportamiento puede variar según el emulador de terminal que uses (Windows Terminal, Alacritty, GNOME Terminal, etc.).
 
 Si el error persiste, encontrás un bug o querés proponer una mejora, abrí un [Issue](https://github.com/1R1an1/TermFlow.Net/issues) indicando tu sistema operativo y emulador de terminal.
+
+---
+
+## 📄 Licencia
+Este proyecto está bajo la licencia **Mozilla Public License 2.0 (MPL-2.0)**.
