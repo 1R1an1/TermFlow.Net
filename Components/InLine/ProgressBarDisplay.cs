@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
 namespace TermFlow.Components.InLine
@@ -29,6 +30,7 @@ namespace TermFlow.Components.InLine
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             var taskState = new ProgressTaskImpl();
+            long _panelId = LivePanel.IsActive ? LivePanel.AddDynamic($"{description} 0%") : -1;
 
 
             Console.CursorVisible = false;
@@ -81,17 +83,21 @@ namespace TermFlow.Components.InLine
                         string barEmpty = new string('░', Math.Max(0, emptyBlocks));
                         string colBar = $"{ThemeColors.Success}[{barFilled}{ThemeColors.Dim}{barEmpty}{ThemeColors.Success}]{ThemeColors.Reset}";
 
-                        // Ensamblar buffer completo de la línea
-                        lineBuffer.Clear();
-                        lineBuffer.Append("\r");
-                        lineBuffer.Append(colDesc);
-                        lineBuffer.Append(colBar);
-                        lineBuffer.Append(colPercent);
-                        lineBuffer.Append(colSpeed);
-                        lineBuffer.Append(colEta);
-                        lineBuffer.Append("\x1b[K"); // Eliminar fantasmas a la derecha
+                        string line = $"{colDesc}{colBar}{colPercent}{colSpeed}{colEta}";
 
-                        Console.Write(lineBuffer.ToString());
+
+                        if (LivePanel.IsActive)
+                            LivePanel.UpdateLine(_panelId, line);
+                        else
+                        {
+                            // Ensamblar buffer completo de la línea
+                            lineBuffer.Clear();
+                            lineBuffer.Append("\r");
+                            lineBuffer.Append(line);
+                            lineBuffer.Append("\x1b[K"); // Eliminar fantasmas a la derecha
+
+                            Console.Write(lineBuffer.ToString());
+                        }
 
                         await Task.Delay(50, internalCts.Token);
 
@@ -103,10 +109,7 @@ namespace TermFlow.Components.InLine
                         }
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                    // Aborto limpio instantáneo
-                }
+                catch (OperationCanceledException) { }
             }, internalCts.Token);
 
             try
@@ -120,7 +123,13 @@ namespace TermFlow.Components.InLine
 
                 // Dibujar estado final al 100% clavado e inline
                 int width = fixedBarWidth ?? 20;
-                Console.Write($"\r{ThemeColors.Success}{ConsoleGlyphs.Checked} {description} {ThemeColors.Success}[{new string('█', width)}] 100% {ThemeColors.Dim}(Completado){ThemeColors.Reset}\x1b[K\n");
+                string finalLine = $"{ThemeColors.Success}{ConsoleGlyphs.Checked} {description} {ThemeColors.Success}[{new string('█', width)}] 100% {ThemeColors.Dim}(Completado){ThemeColors.Reset}";
+
+                if (LivePanel.IsActive)
+                    LivePanel.UpdateLine(_panelId, finalLine);
+                else
+                    Console.Write($"\r{finalLine}\x1b[K\n");
+
                 Console.CursorVisible = true;
             }
         }

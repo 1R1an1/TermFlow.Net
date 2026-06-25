@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
 namespace TermFlow.Components.InLine
@@ -9,13 +10,14 @@ namespace TermFlow.Components.InLine
     {
         public static readonly string[] DefaultFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
 
-        public static async Task<string> RunAsync(string description, Func<CancellationToken, Task> workerTask, string[] customFrames = null, string completionText = "(Completado)", CancellationToken token = default)
+        public static async Task RunAsync(string description, Func<CancellationToken, Task> workerTask, string[] customFrames = null, string completionText = "(Completado)", CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             string[] frames = customFrames ?? DefaultFrames;
 
 
             Console.CursorVisible = false;
+            long _panelId = LivePanel.IsActive ? LivePanel.AddDynamic($"{description} spinning...") : -1;
 
             // Hilo de renderizado de la animación
             Task renderTask = Task.Run(async () =>
@@ -23,10 +25,16 @@ namespace TermFlow.Components.InLine
                 int frameIndex = 0;
                 try
                 {
+
                     while (!internalCts.Token.IsCancellationRequested)
                     {
                         // \r vuelve al inicio, \x1b[K limpia hacia la derecha
-                        Console.Write($"\r{ThemeColors.Warning}{frames[frameIndex]}{ThemeColors.Reset} {description}\x1b[K");
+                        string line = $"{ThemeColors.Warning}{frames[frameIndex]}{ThemeColors.Reset} {description}";
+                        if (LivePanel.IsActive)
+                            LivePanel.UpdateLine(_panelId, line);
+                        else
+                            Console.Write($"\r{line}\x1b[K");
+
                         frameIndex = (frameIndex + 1) % frames.Length;
 
                         await Task.Delay(80, internalCts.Token);
@@ -49,10 +57,14 @@ namespace TermFlow.Components.InLine
                 internalCts.Cancel();
                 await renderTask;
 
+                string line = $"{ThemeColors.Success}{ConsoleGlyphs.Checked} {description} {ThemeColors.Dim}{completionText}{ThemeColors.Reset}";
+                if (LivePanel.IsActive)
+                    LivePanel.UpdateLine(_panelId, line);
+                else
+                    Console.Write($"\r{line}\x1b[K\n");
                 // Render final de éxito inline
                 Console.CursorVisible = true;
             }
-            return $"{description} {ThemeColors.Dim}{completionText}{ThemeColors.Reset}";
         }
     }
 }

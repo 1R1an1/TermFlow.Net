@@ -40,7 +40,7 @@ namespace TermFlow.Components.FullScreen
                 {
                     int width = 80;
                     try { width = Console.WindowWidth; } catch { }
-                    int newLines = WrapText(message, width).Count;
+                    int newLines = message.WrapText(width).Count;
                     _scrollOffset += newLines;
 
                     _hasNewLogsBelow = true;
@@ -220,10 +220,10 @@ namespace TermFlow.Components.FullScreen
                 string[] inputLines = currentInput.Split('\n');
 
                 // La primera línea cuenta junto con el prompt de la consola
-                inputRows += Math.Max(1, WrapText(prompt + inputLines[0], width).Count);
+                inputRows += Math.Max(1, (prompt + inputLines[0]).WrapText(width).Count);
                 for (int i = 1; i < inputLines.Length; i++)
                 {
-                    inputRows += Math.Max(1, WrapText(inputLines[i], width).Count);
+                    inputRows += Math.Max(1, inputLines[i].WrapText(width).Count);
                 }
 
                 int logRowsAvailable = Math.Max(1, height - inputRows - 1);
@@ -232,7 +232,7 @@ namespace TermFlow.Components.FullScreen
                 int totalLogLines = 0;
                 foreach (var log in _logs)
                 {
-                    totalLogLines += WrapText(log, width).Count;
+                    totalLogLines += log.WrapText(width).Count;
                 }
 
                 int maxScroll = Math.Max(0, totalLogLines - logRowsAvailable);
@@ -321,7 +321,7 @@ namespace TermFlow.Components.FullScreen
             while (currentLogIndex >= 0 && result.Count < maxLines)
             {
                 string log = _logs[currentLogIndex];
-                var wrappedLines = WrapText(log, width);
+                var wrappedLines = log.WrapText(width);
 
                 // Los leemos de abajo hacia arriba para rellenar la pantalla
                 for (int i = wrappedLines.Count - 1; i >= 0; i--)
@@ -346,31 +346,6 @@ namespace TermFlow.Components.FullScreen
 
             result.Reverse(); // Invertimos para que queden en orden cronológico correcto
             return result;
-        }
-
-        private List<string> WrapText(string text, int width)
-        {
-            if (width <= 0) return new List<string> { text };
-            var lines = new List<string>();
-
-            // 1. Separamos primero por los saltos de línea reales (\n) del mensaje
-            string[] paragraphs = text.Split('\n');
-
-            foreach (var paragraph in paragraphs)
-            {
-                if (paragraph.Length == 0)
-                {
-                    lines.Add(""); // Línea vacía si el usuario metió un Enter doble
-                    continue;
-                }
-
-                // 2. Envolvemos cada párrafo según el ancho de la ventana
-                for (int i = 0; i < paragraph.Length; i += width)
-                {
-                    lines.Add(paragraph.Substring(i, Math.Min(width, paragraph.Length - i)));
-                }
-            }
-            return lines;
         }
     }
 }
