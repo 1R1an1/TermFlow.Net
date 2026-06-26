@@ -115,86 +115,87 @@ namespace TermFlow.Components.FullScreen
             {
                 while (!token.IsCancellationRequested)
                 {
-                    if (Console.KeyAvailable)
+                    var input = InputReader.ReadInput();
+                    if (input.Type == InputEventType.None)
                     {
-                        var key = Console.ReadKey(intercept: true);
-
-                        // Si es la tecla ESC, verificamos si es una secuencia ANSI de Mouse
-                        if (key.KeyChar == '\x1b' && Console.KeyAvailable)
-                        {
-                            await Task.Delay(1, token); // Damos 1ms para que entre la ráfaga completa
-                            string seq = "";
-                            while (Console.KeyAvailable) seq += Console.ReadKey(intercept: true).KeyChar;
-
-                            lock (_stateLock)
-                            {
-                                if (seq.StartsWith("[<64;")) _scrollOffset += 3; // Rueda Arriba
-                                else if (seq.StartsWith("[<65;")) _scrollOffset = Math.Max(0, _scrollOffset - 3); // Rueda Abajo
-                            }
-                            RequestRender();
-                            continue;
-                        }
-
-                        lock (_stateLock)
-                        {
-                            if (key.Key == ConsoleKey.Enter)
-                            {
-                                // Detectar Shift+Enter o Alt+Enter para salto de línea interno
-                                bool WantsNewLine = (key.Modifiers & ConsoleModifiers.Shift) != 0 ||
-                                                    (key.Modifiers & ConsoleModifiers.Alt) != 0;
-
-                                if (WantsNewLine)
-                                {
-                                    _inputBuffer += "\n";
-                                    _scrollOffset = 0; // Lleva la vista al presente al escribir
-                                }
-                                else
-                                {
-                                    // Enter común: Enviar mensaje
-                                    if (!string.IsNullOrWhiteSpace(_inputBuffer))
-                                    {
-                                        string msg = _inputBuffer;
-                                        _inputBuffer = "";
-                                        _scrollOffset = 0; // Al enviar algo, el scroll se pega abajo al 100%
-
-                                        // SOPORTE PARA /EXIT: Si escribe /exit, cancelamos el CTS y salimos
-                                        if (msg.Trim().Equals("/exit", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            cts.Cancel();
-                                            return;
-                                        }
-
-                                        // Disparamos la lógica de red sin frenar el render
-                                        Task.Run(() => onInputSubmitted(msg), token);
-                                    }
-                                }
-                            }
-                            else if (key.Key == ConsoleKey.Escape) // Salir con Esc limpio
-                            {
-                                cts.Cancel();
-                                return; // Rompe el bucle de input, el RunAsync() principal lo detectará
-                            }
-                            else if (key.Key == ConsoleKey.UpArrow) { _scrollOffset++; }
-                            else if (key.Key == ConsoleKey.DownArrow) { _scrollOffset = Math.Max(0, _scrollOffset - 1); }
-                            else if (key.Key == ConsoleKey.End) { _scrollOffset = 0; }
-                            else if (key.Key == ConsoleKey.Backspace && _inputBuffer.Length > 0)
-                            {
-                                _inputBuffer = _inputBuffer[..^1];
-                                _scrollOffset = 0; // Si escribe o borra, lo llevamos al presente
-                            }
-                            else if (!char.IsControl(key.KeyChar))
-                            {
-                                _inputBuffer += key.KeyChar;
-                                _scrollOffset = 0; // Si escribe, lo llevamos al presente
-                            }
-                        }
-                        RequestRender();
-                    }
-                    else
-                    {
-                        // Si no hay tecla, dormimos el hilo 15ms para no fundir el procesador
+                        // Si no hay tecla dormimos el hilo 15ms para no fundir el procesador
                         await Task.Delay(15, token);
+                        continue;
                     }
+
+                    if (input.Type == InputEventType.ScrollUp)
+                    {
+                        lock (_stateLock)
+                            _scrollOffset += 3; // Rueda Arriba
+                        RequestRender();
+                        continue;
+                    }
+                    else if (input.Type == InputEventType.ScrollDown)
+                    {
+                        lock (_stateLock)
+                            _scrollOffset = Math.Max(0, _scrollOffset - 3); // Rueda Abajo
+                        RequestRender();
+                        continue;
+                    }
+
+                    lock (_stateLock)
+                    {
+                        var key = input.KeyInfo;
+                        if (key.Key == ConsoleKey.Enter)
+                        {
+                            // Detectar Shift+Enter o Alt+Enter para salto de línea interno
+                            bool WantsNewLine = (key.Modifiers & ConsoleModifiers.Shift) != 0 ||
+                                                (key.Modifiers & ConsoleModifiers.Alt) != 0;
+
+                            if (WantsNewLine)
+                            {
+                                _inputBuffer += "\n";
+                                _scrollOffset = 0; // Lleva la vista al presente al escribir
+                            }
+                            else
+                            {
+                                // Enter común: Enviar mensaje
+                                if (!string.IsNullOrWhiteSpace(_inputBuffer))
+                                {
+                                    string msg = _inputBuffer;
+                                    _inputBuffer = "";
+                                    _scrollOffset = 0; // Al enviar algo, el scroll se pega abajo al 100%
+
+                                    // SOPORTE PARA /EXIT: Si escribe /exit, cancelamos el CTS y salimos
+                                    if (msg.Trim().Equals("/exit", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        cts.Cancel();
+                                        return;
+                                    }
+
+                                    // Disparamos la lógica de red sin frenar el render
+                                    Task.Run(() => onInputSubmitted(msg), token);
+                                }
+                            }
+                        }
+                        else if (key.Key == ConsoleKey.Escape) // Salir con Esc limpio
+                        {
+                            cts.Cancel();
+                            return; // Rompe el bucle de input, el RunAsync() principal lo detectará
+                        }
+                        else if (key.Key == ConsoleKey.UpArrow) { _scrollOffset++; }
+                        else if (key.Key == ConsoleKey.DownArrow) { _scrollOffset = Math.Max(0, _scrollOffset - 1); }
+                        else if (key.Key == ConsoleKey.End) { _scrollOffset = 0; }
+                        else if (key.Key == ConsoleKey.Backspace && _inputBuffer.Length > 0)
+                        {
+                            _inputBuffer = _inputBuffer[..^1];
+                            _scrollOffset = 0; // Si escribe o borra, lo llevamos al presente
+                        }
+                        else if (!char.IsControl(key.KeyChar))
+                        {
+                            _inputBuffer += key.KeyChar;
+                            _scrollOffset = 0; // Si escribe, lo llevamos al presente
+                        }
+                    }
+                    RequestRender();
+
+                    // Dormimos el hilo 7ms para no fundir el procesador
+                    await Task.Delay(7, token);
                 }
             }
             catch (OperationCanceledException) { }
@@ -202,7 +203,6 @@ namespace TermFlow.Components.FullScreen
 
         private void RenderScreen(string prompt, int width, int height)
         {
-
             StringBuilder buffer = new StringBuilder(4096);
             buffer.Append("\x1b[H"); // Mover el cursor arriba a la izquierda
 
