@@ -18,8 +18,6 @@ namespace TermFlow.Components.FullScreen
 
             StringBuilder sb = new StringBuilder(1024);
 
-            Engine.EnterFullScreen(false);
-            Console.CursorVisible = false;
 
             // 2. Construcción modular de la estructura
             AppendBorder(sb, ConsoleGlyphs.TopLeft, ConsoleGlyphs.TopRight, totalInnerWidth);
@@ -28,14 +26,13 @@ namespace TermFlow.Components.FullScreen
             AppendDataRows(sb, rows, colWidths);
             AppendBorder(sb, ConsoleGlyphs.BottomLeft, ConsoleGlyphs.BottomRight, totalInnerWidth);
 
-            sb.Append('\n');
 
             // 3. Volcado único a pantalla
-            Console.Write(sb.ToString());
-            TextInput.PressToContinue();
+            if (LivePanel.IsActive)
+                LivePanel.AddLog(sb.ToString());
+            else
+                Console.Write(sb.Append('\n'));
 
-            Engine.ExitFullScreen();
-            Console.CursorVisible = true;
         }
 
         private static int[] CalculateColumnWidths(string[] headers, List<string[]> rows)
@@ -43,7 +40,7 @@ namespace TermFlow.Components.FullScreen
             int[] widths = new int[headers.Length];
             for (int i = 0; i < headers.Length; i++)
             {
-                widths[i] = headers[i].Length;
+                widths[i] = headers[i].GetVisualLength();
             }
 
             foreach (var row in rows)
