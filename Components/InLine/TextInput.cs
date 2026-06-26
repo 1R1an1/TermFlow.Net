@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
 namespace TermFlow.Components.InLine
@@ -14,77 +15,90 @@ namespace TermFlow.Components.InLine
         /// </summary>
         public static async Task<string> ReadStringAsync(string prompt, CancellationToken token = default)
         {
-            // Imprimimos el prompt exacto sin espacios agregados artificialmente
-            Console.Write(prompt);
-
+            long? dynamicId = null;
             StringBuilder inputBuffer = new StringBuilder();
-            Console.CursorVisible = true;
+
+            if (LivePanel.IsActive)
+                dynamicId = LivePanel.AddDynamic(prompt);
+            else
+            {
+                Console.Write(prompt);
+                Console.CursorVisible = true;
+            }
 
             try
             {
                 while (!token.IsCancellationRequested)
                 {
-                    if (Console.KeyAvailable)
+                    ConsoleKeyInfo keyInfo = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
+
+                    if (keyInfo.Key == ConsoleKey.Enter)
                     {
-                        // Interceptamos la tecla para controlarla nosotros manualmente
-                        ConsoleKeyInfo keyInfo = Console.ReadKey(intercept: true);
+                        if (!LivePanel.IsActive) Console.WriteLine();
+                        return inputBuffer.ToString();
+                    }
 
-                        // Confirmación de entrada
-                        if (keyInfo.Key == ConsoleKey.Enter)
+                    if (keyInfo.Key == ConsoleKey.Backspace)
+                    {
+                        if (inputBuffer.Length > 0)
                         {
-                            Console.WriteLine(); // Salto de línea limpio para dejar el cursor listo abajo
-                            return inputBuffer.ToString();
-                        }
+                            inputBuffer.Remove(inputBuffer.Length - 1, 1);
 
-                        // Manejo manual de Backspace (Borrar último carácter)
-                        if (keyInfo.Key == ConsoleKey.Backspace)
-                        {
-                            if (inputBuffer.Length > 0)
-                            {
-                                inputBuffer.Remove(inputBuffer.Length - 1, 1);
-                                // Retrocedemos el cursor, pintamos un espacio en blanco y retrocedemos de nuevo
+                            // 2. Actualizamos la vista al borrar
+                            if (LivePanel.IsActive)
+                                LivePanel.UpdateLine(dynamicId.Value, prompt + inputBuffer.ToString());
+                            else
                                 Console.Write("\b \b");
-                            }
-                        }
-                        // Captura de caracteres imprimibles normales (evitando teclas de control/flechas)
-                        else if (!char.IsControl(keyInfo.KeyChar))
-                        {
-                            inputBuffer.Append(keyInfo.KeyChar);
-                            Console.Write(keyInfo.KeyChar);
                         }
                     }
-                    else
+                    else if (!char.IsControl(keyInfo.KeyChar))
                     {
-                        // Pequeño delay para no incinerar el CPU mientras esperamos que el usuario escriba
-                        await Task.Delay(15);
+                        inputBuffer.Append(keyInfo.KeyChar);
+
+                        // 3. Actualizamos la vista al escribir
+                        if (LivePanel.IsActive)
+                            LivePanel.UpdateLine(dynamicId.Value, prompt + inputBuffer.ToString());
+                        else
+                            Console.Write(keyInfo.KeyChar);
                     }
+                    await Task.Delay(15, token);
                 }
             }
             finally
             {
-                Console.CursorVisible = false;
+                if (!LivePanel.IsActive) Console.CursorVisible = false;
             }
 
-            // Si salimos por cancelación del token, devolvemos una cadena vacía
             return null;
         }
 
         public static async Task<bool> AskAsync(string prompt)
         {
+            string fullPrompt = $"{prompt} {AnsiColor.Cyan}[y/n]{ThemeColors.Reset} ";
+            long? dynamicId = null;
 
-            Console.Write($"{prompt} {AnsiColor.Cyan}[y/n]{ThemeColors.Reset} ");
+            if (LivePanel.IsActive)
+                dynamicId = LivePanel.AddDynamic(fullPrompt);
+            else
+                Console.Write(fullPrompt);
 
             while (true)
             {
-                var key = Console.ReadKey(intercept: true).Key;
+                var key = LivePanel.IsActive ? (await LivePanel.WaitForKeyAsync()).Key : Console.ReadKey(intercept: true).Key;
                 if (key == ConsoleKey.Y)
                 {
-                    Console.WriteLine("y");
+                    if (LivePanel.IsActive)
+                        LivePanel.UpdateLine(dynamicId.Value, fullPrompt + "y");
+                    else
+                        Console.WriteLine("y");
                     return true;
                 }
                 if (key == ConsoleKey.N || key == ConsoleKey.Escape)
                 {
-                    Console.WriteLine("n");
+                    if (LivePanel.IsActive)
+                        LivePanel.UpdateLine(dynamicId.Value, fullPrompt + "n");
+                    else
+                        Console.WriteLine("n");
                     return false;
                 }
             }
@@ -93,7 +107,7 @@ namespace TermFlow.Components.InLine
         public static void PressToContinue(string message = "[Presiona enter para regresar]")
         {
             TextViewer.WritePlain($"{ThemeColors.Dim}  {message}{ThemeColors.Reset}");
-            while (Console.ReadKey(true).Key != ConsoleKey.Enter) { }
+            while ((LivePanel.IsActive ? LivePanel.WaitForKey().Key : Console.ReadKey(true).Key) != ConsoleKey.Enter) { }
         }
     }
 }

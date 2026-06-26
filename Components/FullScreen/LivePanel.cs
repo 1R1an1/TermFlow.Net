@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -27,6 +28,8 @@ namespace TermFlow.Components.FullScreen
         private static long _nextId = 0;
         private static int _scrollOffset = 0; // Líneas físicas scrolleadas
         private static SemaphoreSlim _renderSignal = new(0, 1);
+        private static readonly ConcurrentQueue<ConsoleKeyInfo> _keyQueue = new();
+        private static readonly SemaphoreSlim _keySignal = new(0);
         private static CancellationTokenSource _cts;
         private static bool _isActive = false;
         private static readonly object _lock = new();
@@ -37,7 +40,11 @@ namespace TermFlow.Components.FullScreen
         {
             if (_isActive) return;
             _isActive = true;
+
             _cts = new CancellationTokenSource();
+
+            while (_keyQueue.TryDequeue(out _)) { }
+            while (_keySignal.Wait(0)) { }
 
             Engine.EnterFullScreen();
 
@@ -49,7 +56,9 @@ namespace TermFlow.Components.FullScreen
         {
             if (!_isActive) return;
             _isActive = false;
+
             _cts?.Cancel();
+            _cts?.Dispose();
             _cts = null;
 
             Engine.ExitFullScreen();
@@ -59,6 +68,9 @@ namespace TermFlow.Components.FullScreen
                 _history.Clear();
                 _nextId = 0;
                 _scrollOffset = 0;
+
+                while (_keyQueue.TryDequeue(out _)) { }
+                while (_keySignal.Wait(0)) { }
             }
         }
 
@@ -140,6 +152,7 @@ namespace TermFlow.Components.FullScreen
                     // Calcular total de líneas físicas y ajustar scroll
                     List<List<string>> wrappedLines = new List<List<string>>();
                     int totalLines = 0;
+                    int currentScroll;
                     lock (_lock)
                     {
                         foreach (var entry in _history)
@@ -148,17 +161,19 @@ namespace TermFlow.Components.FullScreen
                             wrappedLines.Add(lines);
                             totalLines += lines.Count;
                         }
+
+                        int maxScroll = Math.Max(0, totalLines - height);
+
+                        // Si _scrollOffset es mayor que maxScroll, ajustar
+                        if (_scrollOffset > maxScroll)
+                            _scrollOffset = maxScroll;
+
+                        // Si _scrollOffset es negativo, poner en 0
+                        if (_scrollOffset < 0)
+                            _scrollOffset = 0;
+
+                        currentScroll = _scrollOffset;
                     }
-
-                    int maxScroll = Math.Max(0, totalLines - height);
-
-                    // Si _scrollOffset es mayor que maxScroll, ajustar
-                    if (_scrollOffset > maxScroll)
-                        _scrollOffset = maxScroll;
-
-                    // Si _scrollOffset es negativo, poner en 0
-                    if (_scrollOffset < 0)
-                        _scrollOffset = 0;
 
 
                     // Construir buffer visible
@@ -235,10 +250,48 @@ namespace TermFlow.Components.FullScreen
                         RequestRender();
                     }
 
+                    if (evt.Type == InputEventType.Key)
+                    {
+                        _keyQueue.Enqueue(evt.KeyInfo);
+                        _keySignal.Release(); // Sube el contador del semáforo y despierta la tarea
+                    }
+
                     await Task.Delay(15, token);
                 }
             }
             catch (OperationCanceledException) { }
+        }
+
+        public static async Task<ConsoleKeyInfo> WaitForKeyAsync(CancellationToken token = default)
+        {
+            if (!_isActive) return default;
+
+            while (_keyQueue.TryDequeue(out _)) { }
+            while (_keySignal.Wait(0)) { }
+
+            try
+            {
+                await _keySignal.WaitAsync(token).ConfigureAwait(false);
+                _keyQueue.TryDequeue(out var key);
+                return key;
+            }
+            catch (OperationCanceledException) { return default; }
+        }
+
+        public static ConsoleKeyInfo WaitForKey(CancellationToken token = default)
+        {
+            if (!_isActive) return default;
+
+            while (_keyQueue.TryDequeue(out _)) { }
+            while (_keySignal.Wait(0)) { }
+
+            try
+            {
+                _keySignal.Wait(token);
+                _keyQueue.TryDequeue(out var key);
+                return key;
+            }
+            catch (OperationCanceledException) { return default; }
         }
     }
 }

@@ -1,5 +1,6 @@
-﻿using System.Threading;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using Figgle.Fonts;
 using TermFlow.Components.FullScreen;
 using TermFlow.Components.InLine;
 using TermFlow.Core;
@@ -8,33 +9,53 @@ namespace TermFlow;
 
 class Program
 {
-    // Bandera atómica para garantizar que el Shutdown se ejecute EXACTAMENTE UNA VEZ
-    private static int _shutdownExecuted = 0;
-
     static async Task Main(string[] args)
     {
         Engine.Setup();
-        // Activar el panel
-        LivePanel.Start();
-
-        // Logs estáticos
-        TextViewer.Info("Iniciando proceso...");
-        TextViewer.Success("Conexión establecida.");
-
-        // Barra de progreso (se muestra en el panel)
-        _ = ProgressBarDisplay.RunAsync("Descargando", 100, async (p) =>
+        while (true)
         {
-            for (int i = 0; i <= 100; i++)
+
+            // Activar el panel
+            LivePanel.Start();
+            var appLifetimeToken = new TaskCompletionSource();
+
+            // Logs estáticos
+            TextViewer.Info("Iniciando proceso...");
+            TextViewer.Success("Conexión establecida.");
+
+            // TextViewer.FigletText("00:00:00 I 0", FiggleFonts.SubZero, AnsiColor.Cyan + AnsiColor.Bold);
+
+            // Barra de progreso (se muestra en el panel)
+            _ = ProgressBarDisplay.RunAsync("Descargando", 100, async (p) =>
             {
-                p.Value = i;
-                await Task.Delay(200);
-                TextViewer.Info("Descarga terminada: " + i);
-            }
-        });
+                for (int i = 0; i <= 100; i += 5)
+                {
+                    p.Value = i;
+                    await Task.Delay(2000);
+                    TextViewer.Info("Descarga terminada: " + i);
+                }
 
-        _ = SpinnerDisplay.RunAsync("Terminando2. . .", async (_) => { await Task.Delay(12345); });
-        await SpinnerDisplay.RunAsync("Terminando. . .", async (_) => { await Task.Delay(123123123); });
+                appLifetimeToken.SetResult();
+            });
 
+            _ = SpinnerDisplay.RunAsync("Terminando2. . .", async (_) => { await Task.Delay(12345); });
+            //await SpinnerDisplay.RunAsync("Terminando. . .", async (_) => { await Task.Delay(123123123); });
+
+            string[] headers = { $"{ThemeColors.Reset + AnsiColor.Cyan + AnsiColor.Bold}ID", "Nombre Servidor", "IP Puerto", "Estado" };
+            var rows = new List<string[]>
+            {
+                new[] { $"{AnsiColor.Cyan}001{ThemeColors.Reset}", "ControlHub.PCServer", "127.0.0.1:8080", "ONLINE" },
+                new[] { $"{AnsiColor.Cyan}002{ThemeColors.Reset}", "ControlHub.PCCommon", "127.0.0.1:8081", "STANDBY" },
+                new[] { $"{AnsiColor.Cyan}003{ThemeColors.Reset}", "Backup_Node", "192.168.1.50:9000", "OFFLINE" }
+            };
+
+            TableView.Show(headers, rows, ThemeColors.Primary + AnsiColor.Bold);
+            await appLifetimeToken.Task;
+            TextInput.PressToContinue();
+            TextViewer.Info("Descarga terminada");
+            // LivePanel.Stop();
+        }
+        //Console.ReadKey(true);
         // await ProgressBarDisplay.RunAsync("Descargando", 2000, async (p) =>
         //         {
         //             for (int i = 0; i <= 2000; i++)
@@ -63,15 +84,5 @@ class Program
         // await PanelHost.RunAsync(panel);
 
         // await new ProgressBarDisplay("adawda", 100).RunInlineAsync(async (_) => { await Task.Delay(10000); });
-    }
-
-    private static void ExecuteSafeShutdown()
-    {
-        // Interlocked.Exchange cambia el valor a 1 y devuelve el valor VIEJO.
-        // Si el valor viejo era 0, significa que nadie ejecutó el Shutdown todavía.
-        if (Interlocked.Exchange(ref _shutdownExecuted, 1) == 0)
-        {
-            Engine.ExitFullScreen();
-        }
     }
 }
