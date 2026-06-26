@@ -168,6 +168,7 @@ namespace TermFlow.Components.FullScreen
                     int lineIndex = 0;
                     int visibleStart = Math.Max(0, totalLines - height - _scrollOffset);
                     int visibleEnd = Math.Min(totalLines, visibleStart + height);
+                    int remaining = height - (visibleEnd - visibleStart);
 
                     for (int i = 0; i < wrappedLines.Count && lineIndex < visibleEnd; i++)
                     {
@@ -176,7 +177,9 @@ namespace TermFlow.Components.FullScreen
                         {
                             if (lineIndex >= visibleStart && lineIndex < visibleEnd)
                             {
-                                sb.Append(lines[j]).Append("\x1b[K\n");
+                                sb.Append(lines[j]).Append("\x1b[K");
+                                if (remaining > 0 || lineIndex < visibleEnd - 1) sb.Append("\n");
+
                             }
                             lineIndex++;
                             if (lineIndex >= visibleEnd) break;
@@ -184,10 +187,10 @@ namespace TermFlow.Components.FullScreen
                     }
 
                     // Limpiar líneas sobrantes
-                    int remaining = height - (visibleEnd - visibleStart);
                     for (int i = 0; i < remaining; i++)
                     {
-                        sb.Append("\x1b[K\n");
+                        sb.Append("\x1b[K");
+                        if (i < remaining - 1) sb.Append("\n");
                     }
 
                     Console.Write(sb.ToString());
