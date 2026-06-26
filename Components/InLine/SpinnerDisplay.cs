@@ -15,8 +15,6 @@ namespace TermFlow.Components.InLine
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             string[] frames = customFrames ?? DefaultFrames;
 
-
-            Console.CursorVisible = false;
             long _panelId = LivePanel.IsActive ? LivePanel.AddDynamic($"{description} spinning...") : -1;
 
             // Hilo de renderizado de la animación
@@ -62,8 +60,6 @@ namespace TermFlow.Components.InLine
                     LivePanel.UpdateLine(_panelId, line);
                 else
                     Console.Write($"\r{line}\x1b[K\n");
-                // Render final de éxito inline
-                Console.CursorVisible = true;
             }
         }
     }

@@ -32,9 +32,6 @@ namespace TermFlow.Components.InLine
             var taskState = new ProgressTaskImpl();
             long _panelId = LivePanel.IsActive ? LivePanel.AddDynamic($"{description} 0%") : -1;
 
-
-            Console.CursorVisible = false;
-
             var stopwatch = Stopwatch.StartNew();
             long lastValue = 0;
             double lastTime = 0;
@@ -129,8 +126,6 @@ namespace TermFlow.Components.InLine
                     LivePanel.UpdateLine(_panelId, finalLine);
                 else
                     Console.Write($"\r{finalLine}\x1b[K\n");
-
-                Console.CursorVisible = true;
             }
         }
 

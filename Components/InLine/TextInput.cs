@@ -21,54 +21,43 @@ namespace TermFlow.Components.InLine
             if (LivePanel.IsActive)
                 dynamicId = LivePanel.AddDynamic(prompt);
             else
-            {
                 Console.Write(prompt);
-                Console.CursorVisible = true;
-            }
 
-            try
+            while (!token.IsCancellationRequested)
             {
-                while (!token.IsCancellationRequested)
+                ConsoleKeyInfo keyInfo = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
+
+                if (keyInfo.Key == ConsoleKey.Enter)
                 {
-                    ConsoleKeyInfo keyInfo = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
+                    if (!LivePanel.IsActive) Console.WriteLine();
+                    return inputBuffer.ToString();
+                }
 
-                    if (keyInfo.Key == ConsoleKey.Enter)
+                if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (inputBuffer.Length > 0)
                     {
-                        if (!LivePanel.IsActive) Console.WriteLine();
-                        return inputBuffer.ToString();
-                    }
+                        inputBuffer.Remove(inputBuffer.Length - 1, 1);
 
-                    if (keyInfo.Key == ConsoleKey.Backspace)
-                    {
-                        if (inputBuffer.Length > 0)
-                        {
-                            inputBuffer.Remove(inputBuffer.Length - 1, 1);
-
-                            // 2. Actualizamos la vista al borrar
-                            if (LivePanel.IsActive)
-                                LivePanel.UpdateLine(dynamicId.Value, prompt + inputBuffer.ToString());
-                            else
-                                Console.Write("\b \b");
-                        }
-                    }
-                    else if (!char.IsControl(keyInfo.KeyChar))
-                    {
-                        inputBuffer.Append(keyInfo.KeyChar);
-
-                        // 3. Actualizamos la vista al escribir
+                        // 2. Actualizamos la vista al borrar
                         if (LivePanel.IsActive)
                             LivePanel.UpdateLine(dynamicId.Value, prompt + inputBuffer.ToString());
                         else
-                            Console.Write(keyInfo.KeyChar);
+                            Console.Write("\b \b");
                     }
-                    await Task.Delay(15, token);
                 }
-            }
-            finally
-            {
-                if (!LivePanel.IsActive) Console.CursorVisible = false;
-            }
+                else if (!char.IsControl(keyInfo.KeyChar))
+                {
+                    inputBuffer.Append(keyInfo.KeyChar);
 
+                    // 3. Actualizamos la vista al escribir
+                    if (LivePanel.IsActive)
+                        LivePanel.UpdateLine(dynamicId.Value, prompt + inputBuffer.ToString());
+                    else
+                        Console.Write(keyInfo.KeyChar);
+                }
+                await Task.Delay(15, token);
+            }
             return null;
         }
 
