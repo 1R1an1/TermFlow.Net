@@ -42,6 +42,7 @@ namespace TermFlow.Components.InLine
                 try
                 {
                     StringBuilder lineBuffer = new StringBuilder(256);
+                    string oldLine = "";
 
                     while (!internalCts.Token.IsCancellationRequested)
                     {
@@ -82,18 +83,21 @@ namespace TermFlow.Components.InLine
 
                         string line = $"{colDesc}{colBar}{colPercent}{colSpeed}{colEta}";
 
-
-                        if (LivePanel.IsActive)
-                            LivePanel.UpdateLine(_panelId, line);
-                        else
+                        if (line != oldLine)
                         {
-                            // Ensamblar buffer completo de la línea
-                            lineBuffer.Clear();
-                            lineBuffer.Append("\r");
-                            lineBuffer.Append(line);
-                            lineBuffer.Append("\x1b[K"); // Eliminar fantasmas a la derecha
+                            if (LivePanel.IsActive)
+                                LivePanel.UpdateLine(_panelId, line);
+                            else
+                            {
+                                // Ensamblar buffer completo de la línea
+                                lineBuffer.Clear();
+                                lineBuffer.Append("\r");
+                                lineBuffer.Append(line);
+                                lineBuffer.Append("\x1b[K"); // Eliminar fantasmas a la derecha
 
-                            Console.Write(lineBuffer.ToString());
+                                Console.Write(lineBuffer.ToString());
+                            }
+                            oldLine = line;
                         }
 
                         await Task.Delay(50, internalCts.Token);

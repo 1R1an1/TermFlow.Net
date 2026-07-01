@@ -23,15 +23,19 @@ namespace TermFlow.Components.InLine
                 int frameIndex = 0;
                 try
                 {
-
+                    string oldLine = "";
                     while (!internalCts.Token.IsCancellationRequested)
                     {
                         // \r vuelve al inicio, \x1b[K limpia hacia la derecha
                         string line = $"{ThemeColors.Warning}{frames[frameIndex]}{ThemeColors.Reset} {description}";
-                        if (LivePanel.IsActive)
-                            LivePanel.UpdateLine(_panelId, line);
-                        else
-                            Console.Write($"\r{line}\x1b[K");
+                        if (line != oldLine)
+                        {
+                            if (LivePanel.IsActive)
+                                LivePanel.UpdateLine(_panelId, line);
+                            else
+                                Console.Write($"\r{line}\x1b[K");
+                            oldLine = line;
+                        }
 
                         frameIndex = (frameIndex + 1) % frames.Length;
 
