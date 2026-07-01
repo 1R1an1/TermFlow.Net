@@ -15,6 +15,8 @@ namespace TermFlow.Components.FullScreen
             public long Id { get; }
             public string Content { get; set; }
             public bool IsDynamic { get; set; }
+            public string Prefix { get; set; } = string.Empty;
+            public string Suffix { get; set; } = string.Empty;
 
             public LogEntry(long id, string content, bool isDynamic)
             {
@@ -97,24 +99,49 @@ namespace TermFlow.Components.FullScreen
                 var entry = new LogEntry(id, initialContent, true);
                 _history.Add(entry);
 
-                // Siempre 1 línea física (asumimos que los dinámicos son de una línea)
-                if (_scrollOffset > 0) _scrollOffset += 1;
+                if (_scrollOffset > 0) _scrollOffset += initialContent.CountPhysicalLines(Console.WindowWidth);
             }
             RequestRender();
             return id;
         }
 
-        internal static void UpdateLine(long id, string newContent)
+        internal static void UpdateLine(long id, string newContent) => ApplyUpdate(id, l => l.Content = newContent);
+
+        public static void UpdateDecorations(long id, string prefix = null, string suffix = null) => ApplyUpdate(id, entry =>
+        {
+            if (prefix != null) entry.Prefix = prefix;
+            if (suffix != null) entry.Suffix = suffix;
+        });
+        public static (string prefix, string suffix) GetDecorations(long id) =>
+            _history.Find(e => e.Id == id) is { } entry ? (entry.Prefix, entry.Suffix) : (string.Empty, string.Empty);
+
+
+        private static void ApplyUpdate(long id, Action<LogEntry> updateAction)
         {
             lock (_lock)
             {
-                for (int i = 0; i < _history.Count; i++)
+                // Buscar el elemento
+                var entry = _history.Find(e => e.Id == id);
+                if (entry == null) return;
+
+                int width = Console.WindowWidth;
+
+                // 1. Calcular líneas antes de la actualización
+                string oldFullText = $"{entry.Prefix}{entry.Content}{entry.Suffix}";
+                int oldLines = oldFullText.CountPhysicalLines(width);
+
+                // 2. Ejecutar la modificación específica
+                updateAction(entry);
+
+                // 3. Calcular líneas después de la actualización
+                string newFullText = $"{entry.Prefix}{entry.Content}{entry.Suffix}";
+                int newLines = newFullText.CountPhysicalLines(width);
+
+                // 4. Ajustar scroll si la altura varió
+                int difference = newLines - oldLines;
+                if (_scrollOffset > 0 && difference != 0)
                 {
-                    if (_history[i].Id == id)
-                    {
-                        _history[i].Content = newContent;
-                        break;
-                    }
+                    _scrollOffset += difference;
                 }
             }
             RequestRender();
@@ -157,7 +184,8 @@ namespace TermFlow.Components.FullScreen
                     {
                         foreach (var entry in _history)
                         {
-                            var lines = entry.Content.WrapText(width);
+                            string fullText = $"{entry.Prefix}{entry.Content}{entry.Suffix}";
+                            var lines = fullText.WrapText(width);
                             wrappedLines.Add(lines);
                             totalLines += lines.Count;
                         }
