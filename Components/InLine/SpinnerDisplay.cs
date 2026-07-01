@@ -10,10 +10,10 @@ namespace TermFlow.Components.InLine
     {
         public static readonly string[] DefaultFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
 
-        public static async Task RunAsync(string description, Func<CancellationToken, Task> workerTask, string[] customFrames = null, string completionText = "(Completado)", CancellationToken token = default)
+        public static async Task RunAsync(string description, Func<CancellationToken, Task> workerTask, string finalText = null, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            string[] frames = customFrames ?? DefaultFrames;
+            string[] frames = DefaultFrames;
 
             long _panelId = LivePanel.IsActive ? LivePanel.AddDynamic($"{description} spinning...") : -1;
 
@@ -55,7 +55,7 @@ namespace TermFlow.Components.InLine
                 internalCts.Cancel();
                 await renderTask;
 
-                string line = $"{ThemeColors.Success}{ConsoleGlyphs.Checked} {description} {ThemeColors.Dim}{completionText}{ThemeColors.Reset}";
+                string line = $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} " + (finalText ?? $"{ThemeColors.Success}{description} {ThemeColors.Dim}(Completado){ThemeColors.Reset}");
                 if (LivePanel.IsActive)
                     LivePanel.UpdateLine(_panelId, line);
                 else

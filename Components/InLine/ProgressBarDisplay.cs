@@ -26,7 +26,7 @@ namespace TermFlow.Components.InLine
             }
         }
 
-        public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, int? fixedBarWidth = null, bool showSpeed = true, CancellationToken token = default)
+        public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, string finalText = null, bool showSpeed = true, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             var taskState = new ProgressTaskImpl();
@@ -71,7 +71,7 @@ namespace TermFlow.Components.InLine
 
                         // Calcular espacio disponible para la barra de progreso de forma dinámica
                         int metaWidth = colDesc.GetVisualLength() + colPercent.GetVisualLength() + colSpeed.GetVisualLength() + colEta.GetVisualLength() + 2;
-                        int barWidth = fixedBarWidth ?? Math.Max(10, Console.WindowWidth - metaWidth);
+                        int barWidth = Math.Max(10, Console.WindowWidth - metaWidth);
 
                         int filledBlocks = (int)Math.Round(percentage * barWidth);
                         int emptyBlocks = barWidth - filledBlocks;
@@ -118,9 +118,7 @@ namespace TermFlow.Components.InLine
                 internalCts.Cancel();
                 await renderTask;
 
-                // Dibujar estado final al 100% clavado e inline
-                int width = fixedBarWidth ?? 20;
-                string finalLine = $"{ThemeColors.Success}{ConsoleGlyphs.Checked} {description} {ThemeColors.Success}[{new string('█', width)}] 100% {ThemeColors.Dim}(Completado){ThemeColors.Reset}";
+                string finalLine = $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} " + (finalText ?? $"{description} {ThemeColors.Success}[{new string('█', 20)}] 100% {ThemeColors.Dim}(Completado){ThemeColors.Reset}");
 
                 if (LivePanel.IsActive)
                     LivePanel.UpdateLine(_panelId, finalLine);
