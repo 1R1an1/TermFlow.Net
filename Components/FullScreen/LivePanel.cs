@@ -17,6 +17,7 @@ namespace TermFlow.Components.FullScreen
             public bool IsDynamic { get; set; }
             public string Prefix { get; set; } = string.Empty;
             public string Suffix { get; set; } = string.Empty;
+            public string FullText => $"{Prefix}{Content}{Suffix}";
 
             public LogEntry(long id, string content, bool isDynamic)
             {
@@ -127,15 +128,13 @@ namespace TermFlow.Components.FullScreen
                 int width = Console.WindowWidth;
 
                 // 1. Calcular líneas antes de la actualización
-                string oldFullText = $"{entry.Prefix}{entry.Content}{entry.Suffix}";
-                int oldLines = oldFullText.CountPhysicalLines(width);
+                int oldLines = entry.FullText.CountPhysicalLines(width);
 
                 // 2. Ejecutar la modificación específica
                 updateAction(entry);
 
                 // 3. Calcular líneas después de la actualización
-                string newFullText = $"{entry.Prefix}{entry.Content}{entry.Suffix}";
-                int newLines = newFullText.CountPhysicalLines(width);
+                int newLines = entry.FullText.CountPhysicalLines(width);
 
                 // 4. Ajustar scroll si la altura varió
                 int difference = newLines - oldLines;
@@ -184,8 +183,7 @@ namespace TermFlow.Components.FullScreen
                     {
                         foreach (var entry in _history)
                         {
-                            string fullText = $"{entry.Prefix}{entry.Content}{entry.Suffix}";
-                            var lines = fullText.WrapText(width);
+                            var lines = entry.FullText.WrapText(width);
                             wrappedLines.Add(lines);
                             totalLines += lines.Count;
                         }
@@ -259,7 +257,7 @@ namespace TermFlow.Components.FullScreen
                             int totalLines = 0;
                             foreach (var entry in _history)
                             {
-                                totalLines += entry.Content.CountPhysicalLines(Console.WindowWidth);
+                                totalLines += entry.FullText.CountPhysicalLines(Console.WindowWidth);
                             }
                             int maxScroll = Math.Max(0, totalLines - Console.WindowHeight);
                             if (_scrollOffset < maxScroll)
