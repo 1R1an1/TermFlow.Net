@@ -7,16 +7,28 @@ namespace TermFlow.Components.InLine
     public static class TextViewer
     {
         public static void Info(string msg)
-            => WriteToOutput($"{ThemeColors.Info}{ConsoleGlyphs.InfoBullet}{ThemeColors.Reset} {msg}");
+            => WriteToOutput(InfoF(msg));
 
         public static void Success(string msg)
-            => WriteToOutput($"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} {msg}");
+            => WriteToOutput(SuccessF(msg));
 
         public static void Warn(string msg, bool allColor = true)
-            => WriteToOutput($"{ThemeColors.Warning}!" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}"));
+            => WriteToOutput(WarnF(msg, allColor));
 
         public static void Error(string msg, bool allColor = true)
-            => WriteToOutput($"{ThemeColors.Error}✘" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}"));
+            => WriteToOutput(ErrorF(msg, allColor));
+
+        public static string InfoF(string msg)
+            => $"{ThemeColors.Info}{ConsoleGlyphs.InfoBullet}{ThemeColors.Reset} {msg}";
+
+        public static string SuccessF(string msg)
+            => $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} {msg}";
+
+        public static string WarnF(string msg, bool allColor = true)
+            => $"{ThemeColors.Warning}!" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}");
+
+        public static string ErrorF(string msg, bool allColor = true)
+            => $"{ThemeColors.Error}✘" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}");
 
         public static void WritePlain(string msg)
             => WriteToOutput(msg);
