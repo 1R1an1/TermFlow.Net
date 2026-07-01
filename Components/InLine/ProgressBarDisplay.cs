@@ -33,7 +33,11 @@ namespace TermFlow.Components.InLine
             long _panelId = LivePanel.IsActive ? panelId ?? LivePanel.AddDynamic($"{description} 0%") : -1;
 
             var stopwatch = Stopwatch.StartNew();
-            long lastValue = 0;
+
+            double lastMetricsUpdate = 0;
+            double metricsInterval = 0.25; // 300ms
+
+            double lastValue = 0;
             double lastTime = 0;
             double lastSpeed = 0;
 
@@ -49,11 +53,23 @@ namespace TermFlow.Components.InLine
                         long currentVal = Interlocked.Read(ref taskState._value);
                         double currentTime = stopwatch.Elapsed.TotalSeconds;
 
-                        // Cálculo automático de velocidad (unidades por segundo)
-                        double currentSpeed = currentTime > lastTime && currentTime - lastTime > 0 ? (currentVal - lastValue) / (currentTime - lastTime) : 0;
+                        double currentSpeed = 0;
 
-                        // Usa la última velocidad válida si está trancado
-                        double displaySpeed = currentSpeed > 0 ? currentSpeed : lastSpeed;
+                        if ((currentTime - lastMetricsUpdate) >= metricsInterval)
+                        {
+                            if (currentVal != lastValue && currentTime > lastTime)
+                            {
+                                double instSpeed =
+                                    (currentVal - lastValue) / Math.Max(0.001, (currentTime - lastTime));
+
+                                lastSpeed = instSpeed;
+                                lastValue = currentVal;
+                                lastTime = currentTime;
+                            }
+                            lastMetricsUpdate = currentTime;
+                        }
+
+                        var displaySpeed = lastSpeed;
 
                         double percentage = maxValue > 0 ? (double)currentVal / maxValue : 0;
                         if (percentage > 1.0) percentage = 1.0;
