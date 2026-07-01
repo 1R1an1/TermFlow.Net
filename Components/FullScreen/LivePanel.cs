@@ -31,6 +31,7 @@ namespace TermFlow.Components.FullScreen
         private static long _nextId = 0;
         private static int _scrollOffset = 0; // Líneas físicas scrolleadas
         private static SemaphoreSlim _renderSignal = new(0, 1);
+        private static int _renderPending;
         private static readonly ConcurrentQueue<ConsoleKeyInfo> _keyQueue = new();
         private static readonly SemaphoreSlim _keySignal = new(0);
         private static CancellationTokenSource _cts;
@@ -148,7 +149,7 @@ namespace TermFlow.Components.FullScreen
 
         private static void RequestRender()
         {
-            if (_renderSignal.CurrentCount == 0)
+            if (Interlocked.Exchange(ref _renderPending, 1) == 0)
                 _renderSignal.Release();
         }
 
@@ -163,6 +164,7 @@ namespace TermFlow.Components.FullScreen
                 while (!token.IsCancellationRequested)
                 {
                     await _renderSignal.WaitAsync(token);
+                    Interlocked.Exchange(ref _renderPending, 0);
 
                     // Detectar redimensionamiento
                     if (Console.WindowWidth != lastWidth || Console.WindowHeight != lastHeight)
