@@ -258,9 +258,7 @@ namespace TermFlow.Components.FullScreen
                             // Calcular total de líneas físicas
                             int totalLines = 0;
                             foreach (var entry in _history)
-                            {
                                 totalLines += entry.FullText.CountPhysicalLines(Console.WindowWidth);
-                            }
                             int maxScroll = Math.Max(0, totalLines - Console.WindowHeight);
                             if (_scrollOffset < maxScroll)
                                 _scrollOffset++;

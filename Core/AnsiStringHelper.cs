@@ -104,10 +104,7 @@ namespace TermFlow.Core
         /// Cuenta las líneas físicas que ocupa un texto al ser envuelto.
         /// </summary>
         public static int CountPhysicalLines(this string text, int width)
-        {
-            if (string.IsNullOrEmpty(text)) return 0;
-            return WrapText(text, width).Count;
-        }
+             => WrapText(text, width).Count;
 
         /// <summary>
         /// Trunca un texto a un número máximo de caracteres visuales, conservando ANSI.
