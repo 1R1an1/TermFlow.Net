@@ -2,7 +2,7 @@ using System;
 
 namespace TermFlow.Core
 {
-    public struct ScrollState
+    internal struct ScrollState
     {
         public int Cursor { get; private set; }
         public int Scroll { get; private set; }

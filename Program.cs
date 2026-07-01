@@ -7,7 +7,7 @@ using TermFlow.Core;
 
 namespace TermFlow;
 
-class Program
+internal class Program
 {
     static async Task Main(string[] args)
     {
@@ -23,7 +23,6 @@ class Program
             TextViewer.Info("Iniciando proceso...");
             TextViewer.Success("Conexión establecida.");
 
-            // TextViewer.FigletText("00:00:00 I 0", FiggleFonts.SubZero, AnsiColor.Cyan + AnsiColor.Bold);
 
             // Barra de progreso (se muestra en el panel)
             _ = ProgressBarDisplay.RunAsync("Descargando", 100, async (p) =>

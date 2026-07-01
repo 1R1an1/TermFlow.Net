@@ -74,7 +74,7 @@ namespace TermFlow.Components.FullScreen
             }
         }
 
-        public static void AddLog(string content)
+        internal static void AddLog(string content)
         {
             lock (_lock)
             {
@@ -88,7 +88,7 @@ namespace TermFlow.Components.FullScreen
             RequestRender();
         }
 
-        public static long AddDynamic(string initialContent)
+        internal static long AddDynamic(string initialContent)
         {
             long id;
             lock (_lock)
@@ -104,7 +104,7 @@ namespace TermFlow.Components.FullScreen
             return id;
         }
 
-        public static void UpdateLine(long id, string newContent)
+        internal static void UpdateLine(long id, string newContent)
         {
             lock (_lock)
             {
@@ -262,7 +262,7 @@ namespace TermFlow.Components.FullScreen
             catch (OperationCanceledException) { }
         }
 
-        public static async Task<ConsoleKeyInfo> WaitForKeyAsync(CancellationToken token = default)
+        internal static async Task<ConsoleKeyInfo> WaitForKeyAsync(CancellationToken token = default)
         {
             if (!_isActive) return default;
 
@@ -278,7 +278,7 @@ namespace TermFlow.Components.FullScreen
             catch (OperationCanceledException) { return default; }
         }
 
-        public static ConsoleKeyInfo WaitForKey(CancellationToken token = default)
+        internal static ConsoleKeyInfo WaitForKey(CancellationToken token = default)
         {
             if (!_isActive) return default;
 

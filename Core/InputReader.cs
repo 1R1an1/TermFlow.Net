@@ -4,7 +4,7 @@ using System.Threading;
 
 namespace TermFlow.Core;
 
-public enum InputEventType
+internal enum InputEventType
 {
     None,
     Key,
@@ -12,13 +12,13 @@ public enum InputEventType
     ScrollDown
 }
 
-public struct ConsoleInputEvent
+internal struct ConsoleInputEvent
 {
     public InputEventType Type { get; set; }
     public ConsoleKeyInfo KeyInfo { get; set; }
 }
 
-public static class InputReader
+internal static class InputReader
 {
     public static ConsoleInputEvent ReadInput()
     {
