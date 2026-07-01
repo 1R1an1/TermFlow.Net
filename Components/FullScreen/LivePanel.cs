@@ -88,7 +88,7 @@ namespace TermFlow.Components.FullScreen
             RequestRender();
         }
 
-        internal static long AddDynamic(string initialContent)
+        public static long AddDynamic(string initialContent)
         {
             long id;
             lock (_lock)

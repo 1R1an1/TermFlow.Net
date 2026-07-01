@@ -26,11 +26,11 @@ namespace TermFlow.Components.InLine
             }
         }
 
-        public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, string finalText = null, bool showSpeed = true, CancellationToken token = default)
+        public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, string finalText = null, long? panelId = null, bool showSpeed = true, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             var taskState = new ProgressTaskImpl();
-            long _panelId = LivePanel.IsActive ? LivePanel.AddDynamic($"{description} 0%") : -1;
+            long _panelId = LivePanel.IsActive ? panelId ?? LivePanel.AddDynamic($"{description} 0%") : -1;
 
             var stopwatch = Stopwatch.StartNew();
             long lastValue = 0;

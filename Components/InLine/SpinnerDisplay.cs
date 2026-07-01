@@ -10,12 +10,12 @@ namespace TermFlow.Components.InLine
     {
         public static readonly string[] DefaultFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
 
-        public static async Task RunAsync(string description, Func<CancellationToken, Task> workerTask, string finalText = null, CancellationToken token = default)
+        public static async Task RunAsync(string description, Func<CancellationToken, Task> workerTask, string finalText = null, long? panelId = null, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             string[] frames = DefaultFrames;
 
-            long _panelId = LivePanel.IsActive ? LivePanel.AddDynamic($"{description} spinning...") : -1;
+            long _panelId = LivePanel.IsActive ? panelId ?? LivePanel.AddDynamic($"{description} spinning...") : -1;
 
             // Hilo de renderizado de la animación
             Task renderTask = Task.Run(async () =>
