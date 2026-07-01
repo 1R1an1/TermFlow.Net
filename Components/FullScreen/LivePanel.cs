@@ -106,7 +106,7 @@ namespace TermFlow.Components.FullScreen
             return id;
         }
 
-        internal static void UpdateLine(long id, string newContent) => ApplyUpdate(id, l => l.Content = newContent);
+        public static void UpdateLine(long id, string newContent) => ApplyUpdate(id, l => l.Content = newContent);
 
         public static void UpdateDecorations(long id, string prefix = null, string suffix = null) => ApplyUpdate(id, entry =>
         {
