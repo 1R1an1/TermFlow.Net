@@ -30,7 +30,7 @@ namespace TermFlow.Components.FullScreen
                 int result = -1;
                 var filtered = new List<(string Text, int OriginalIndex)>();
 
-                var router = new InputRouter()
+                var router = new InputRouter(false)
                     .BindCancel(() => { result = -1; exit = true; })
                     .BindConfirm(() => { if (filtered.Count > 0) { result = filtered[cursor].OriginalIndex; exit = true; } }, "elegir")
                     .BindNavigate(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
@@ -102,7 +102,7 @@ namespace TermFlow.Components.FullScreen
                     for (int i = 0; i < preselected.Length; i++)
                         if (i < items.Length && preselected[i]) selectedMap.Add(i);
 
-                var router = new InputRouter()
+                var router = new InputRouter(false)
                     .BindCancel(() => { result = Array.Empty<int>(); exit = true; })
                     .BindConfirm(() =>
                     {

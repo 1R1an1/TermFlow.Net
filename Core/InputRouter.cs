@@ -13,6 +13,7 @@ namespace TermFlow.Core
         private readonly Dictionary<ConsoleKey, Action> _keyHandlers = new();
         private readonly Dictionary<char, Action> _charHandlers = new();
         private Action<ConsoleKeyInfo> _unhandledHandler;
+        private bool _enableDefaultChars;
         private Action _onScrollUp;
         private Action _onScrollDown;
 
@@ -31,6 +32,9 @@ namespace TermFlow.Core
 
         private readonly List<FooterGroup> _footerGroups = new();
         private readonly Dictionary<string, FooterGroup> _groupMap = new(StringComparer.OrdinalIgnoreCase);
+
+        public InputRouter(bool enableDefaultChars = true)
+            => _enableDefaultChars = enableDefaultChars;
 
         /// <summary>
         /// Procesa y agrupa las etiquetas visuales de las teclas en base al nombre de la acción.
@@ -93,8 +97,9 @@ namespace TermFlow.Core
         {
             Bind(ConsoleKey.UpArrow, "↑↓", description, onUp);
             Bind(ConsoleKey.DownArrow, "", description, onDown); // El string vacío evita duplicar flechas en el Join
-            BindChar('j', "j/k", description, onDown);
-            BindChar('k', "", description, onUp);
+            if (!_enableDefaultChars) return this;
+            BindChar('j', "j", description, onDown);
+            BindChar('k', "k", description, onUp);
             return this;
         }
 
@@ -106,6 +111,7 @@ namespace TermFlow.Core
         public InputRouter BindConfirm(Action onConfirm, string description = "confirmar")
         {
             Bind(ConsoleKey.Enter, "Enter", description, onConfirm);
+            if (!_enableDefaultChars) return this;
             BindChar('c', "c", description, onConfirm);
             return this;
         }
@@ -113,6 +119,7 @@ namespace TermFlow.Core
         public InputRouter BindCancel(Action onCancel, string description = "salir")
         {
             Bind(ConsoleKey.Escape, "Esc", description, onCancel);
+            if (!_enableDefaultChars) return this;
             BindChar('q', "q", description, onCancel);
             return this;
         }
