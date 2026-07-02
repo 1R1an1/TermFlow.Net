@@ -36,65 +36,57 @@ namespace TermFlow.Core
             if (width <= 0) { result.Add(text ?? ""); return result; }
             if (string.IsNullOrEmpty(text)) { result.Add(""); return result; }
 
-            var currentLine = new StringBuilder();
-            int visibleCount = 0;
-            int pos = 0;
+            // 1. Normalizamos saltos de línea de Windows (\r\n -> \n) y separamos por líneas lógicas originales
+            string[] logicalLines = text.Replace("\r\n", "\n").Split('\n');
 
-            while (pos < text.Length)
+            foreach (var logicalLine in logicalLines)
             {
-                // 1. Detectar código ANSI
-                if (text[pos] == '\x1b' && pos + 1 < text.Length && text[pos + 1] == '[')
+                // Si es una línea completamente vacía (ej. dos saltos seguidos "\n\n"), la añadimos directo
+                if (logicalLine.Length == 0)
                 {
-                    int end = text.IndexOf('m', pos);
-                    if (end != -1)
-                    {
-                        // Añadir el ANSI a la línea en la posición donde aparece
-                        currentLine.Append(text.Substring(pos, end - pos + 1));
-                        pos = end + 1;
-                        continue;
-                    }
+                    result.Add("");
+                    continue;
                 }
 
-                // 2. Detectar salto de línea
-                if (text[pos] == '\n')
+                var currentLine = new StringBuilder();
+                int visibleCount = 0;
+                int pos = 0;
+
+                while (pos < logicalLine.Length)
                 {
-                    pos++;
-                    // Guardar la línea actual (con sus ANSI)
-                    if (currentLine.Length > 0 || visibleCount == 0)
+                    // 2. Detectar código ANSI
+                    if (logicalLine[pos] == '\x1b' && pos + 1 < logicalLine.Length && logicalLine[pos + 1] == '[')
+                    {
+                        int end = logicalLine.IndexOf('m', pos);
+                        if (end != -1)
+                        {
+                            // Añadir el ANSI a la línea en la posición donde aparece
+                            currentLine.Append(logicalLine.Substring(pos, end - pos + 1));
+                            pos = end + 1;
+                            continue;
+                        }
+                    }
+
+                    // 3. Evaluar el ancho ANTES de agregar el carácter.
+                    // Si ya alcanzamos el límite exacto, cerramos esta línea física e iniciamos la siguiente.
+                    if (visibleCount == width)
                     {
                         result.Add(currentLine.ToString());
                         currentLine.Clear();
                         visibleCount = 0;
                     }
-                    else
-                    {
-                        result.Add("");
-                    }
-                    continue;
+
+                    // 4. Agregar carácter normal
+                    currentLine.Append(logicalLine[pos]);
+                    visibleCount++;
+                    pos++;
                 }
 
-                // 3. Carácter normal
-                currentLine.Append(text[pos]);
-                visibleCount++;
-                pos++;
-
-                // 4. Si llegamos al ancho máximo, guardar la línea
-                if (visibleCount > width)
+                // 5. Guardar el residuo final que haya quedado de esta línea lógica
+                if (currentLine.Length > 0 || visibleCount == 0)
                 {
                     result.Add(currentLine.ToString());
-                    currentLine.Clear();
-                    visibleCount = 0;
                 }
-            }
-
-            // 5. Última línea
-            if (currentLine.Length > 0 || visibleCount == 0)
-            {
-                result.Add(currentLine.ToString());
-            }
-            else if (result.Count == 0)
-            {
-                result.Add("");
             }
 
             return result;
