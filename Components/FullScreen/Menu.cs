@@ -25,7 +25,23 @@ namespace TermFlow.Components.FullScreen
                 int lastWidth = Console.WindowWidth;
                 bool shouldRender = true;
 
-                while (!token.IsCancellationRequested)
+                bool exit = false; int result = -1;
+
+                var router = new InputRouter()
+                    .BindCancel(() => { result = -1; exit = true; })
+                    .BindConfirm(() => { result = cursor; exit = true; })
+                    .BindNavigate(
+                        () => { if (cursor > 0) cursor--; },
+                        () => { if (cursor < items.Length - 1) cursor++; }
+                    )
+                    .BindScroll(
+                        () => { if (cursor > 0) cursor--; },
+                        () => { if (cursor < items.Length - 1) cursor++; }
+                    )
+                    .BindChar('g', "g/G", "extremos", () => cursor = 0)
+                    .BindChar('G', "", "", () => cursor = items.Length - 1);
+
+                while (!token.IsCancellationRequested && !exit)
                 {
                     if (Console.WindowHeight != lastHeight || Console.WindowWidth != lastWidth)
                     {
@@ -42,57 +58,22 @@ namespace TermFlow.Components.FullScreen
 
                     if (shouldRender)
                     {
-                        RenderMenu(buffer, title, items, cursor, scroll, visibleRows, selectedMap: null);
+                        RenderMenu(buffer, title, items, cursor, scroll, visibleRows, null, router);
                         shouldRender = false;
                     }
 
                     var inputEvent = InputReader.ReadInput();
-
                     if (inputEvent.Type != InputEventType.None)
                     {
                         shouldRender = true;
-
-                        if (inputEvent.Type == InputEventType.Key)
-                        {
-                            var key = inputEvent.KeyInfo;
-
-                            if (key.Key == ConsoleKey.Escape || key.KeyChar == 'q' || key.KeyChar == 'Q') return -1;
-                            if (key.Key == ConsoleKey.Enter) return cursor;
-
-                            if (key.Key == ConsoleKey.UpArrow || key.KeyChar == 'k' || key.KeyChar == 'K')
-                            {
-                                if (cursor > 0) cursor--;
-                            }
-                            if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
-                            {
-                                if (cursor < items.Length - 1) cursor++;
-                            }
-                            if (key.KeyChar == 'g') cursor = 0;
-                            if (key.KeyChar == 'G') cursor = items.Length - 1;
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollUp)
-                        {
-                            if (cursor > 0) cursor--;
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollDown)
-                        {
-                            if (cursor < items.Length - 1) cursor++;
-                        }
+                        router.Handle(inputEvent);
                     }
-
                     await Task.Delay(15, token);
                 }
-
-                return -1;
+                return result;
             }
-            catch (OperationCanceledException)
-            {
-                return -1;
-            }
-            finally
-            {
-                Engine.ExitFullScreen();
-            }
+            catch (OperationCanceledException) { return -1; }
+            finally { Engine.ExitFullScreen(); }
         }
 
         public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
@@ -105,91 +86,67 @@ namespace TermFlow.Components.FullScreen
 
                 ScrollState layout = new ScrollState();
                 bool shouldRender = true;
+                bool exit = false;
+                int[] result = Array.Empty<int>();
 
                 HashSet<int> selectedMap = new HashSet<int>();
                 if (preselected != null)
-                {
                     for (int i = 0; i < preselected.Length; i++)
-                    {
                         if (i < items.Length && preselected[i]) selectedMap.Add(i);
-                    }
-                }
 
-                while (!token.IsCancellationRequested)
+                var router = new InputRouter()
+                    .BindSelect(() =>
+                    {
+                        if (selectedMap.Contains(cursor)) selectedMap.Remove(cursor);
+                        else selectedMap.Add(cursor);
+                    })
+                    .BindNavigate(
+                        () => { if (cursor > 0) cursor--; },
+                        () => { if (cursor < items.Length - 1) cursor++; }
+                    )
+                    .BindScroll(
+                        () => { if (cursor > 0) cursor--; },
+                        () => { if (cursor < items.Length - 1) cursor++; }
+                    )
+                    .BindChar('g', "g/G", "extremos", () => cursor = 0)
+                    .BindChar('G', "", "", () => cursor = items.Length - 1)
+                    .BindCancel(() => { result = Array.Empty<int>(); exit = true; })
+                    .BindConfirm(() =>
+                    {
+                        result = new int[selectedMap.Count];
+                        selectedMap.CopyTo(result);
+                        Array.Sort(result);
+                        exit = true;
+                    });
+
+                while (!token.IsCancellationRequested && !exit)
                 {
                     if (layout.Update(cursor, items.Length, ReservedRows))
                     {
-                        shouldRender = true;
-                        Console.Write("\x1b[2J");
+                        shouldRender = true; Console.Write("\x1b[2J");
                     }
                     cursor = layout.Cursor;
                     if (shouldRender)
                     {
-                        RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap);
+                        RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
                         shouldRender = false;
                     }
 
                     var inputEvent = InputReader.ReadInput();
-
                     if (inputEvent.Type != InputEventType.None)
                     {
                         shouldRender = true;
-
-                        if (inputEvent.Type == InputEventType.Key)
-                        {
-                            var key = inputEvent.KeyInfo;
-
-                            if (key.Key == ConsoleKey.Escape || key.KeyChar == 'q' || key.KeyChar == 'Q') return Array.Empty<int>();
-
-                            if (key.KeyChar == 'c' || key.KeyChar == 'C' || key.Key == ConsoleKey.Enter)
-                            {
-                                int[] result = new int[selectedMap.Count];
-                                selectedMap.CopyTo(result);
-                                Array.Sort(result);
-                                return result;
-                            }
-                            if (key.Key == ConsoleKey.Spacebar)
-                            {
-                                if (selectedMap.Contains(cursor)) selectedMap.Remove(cursor);
-                                else selectedMap.Add(cursor);
-                            }
-                            if (key.Key == ConsoleKey.UpArrow || key.KeyChar == 'k' || key.KeyChar == 'K')
-                            {
-                                if (cursor > 0) cursor--;
-                            }
-                            if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
-                            {
-                                if (cursor < items.Length - 1) cursor++;
-                            }
-                            if (key.KeyChar == 'g') cursor = 0;
-                            if (key.KeyChar == 'G') cursor = items.Length - 1;
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollUp)
-                        {
-                            if (cursor > 0) cursor--;
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollDown)
-                        {
-                            if (cursor < items.Length - 1) cursor++;
-                        }
+                        router.Handle(inputEvent);
                     }
-
                     await Task.Delay(15, token);
                 }
-
-                return Array.Empty<int>();
+                return result;
             }
-            catch (OperationCanceledException)
-            {
-                return Array.Empty<int>();
-            }
-            finally
-            {
-                Engine.ExitFullScreen();
-            }
+            catch (OperationCanceledException) { return Array.Empty<int>(); }
+            finally { Engine.ExitFullScreen(); }
         }
 
-        private static void RenderMenu(StringBuilder buffer, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap)
+        private static void RenderMenu(StringBuilder buffer, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
 
             buffer.Clear();
@@ -230,7 +187,7 @@ namespace TermFlow.Components.FullScreen
             }
 
             // Relleno estricto limpiando residuos del fondo
-            for (int i = (end - scroll); i < visibleRows; i++)
+            for (int i = end - scroll; i < visibleRows; i++)
             {
                 buffer.Append("\x1b[K\n");
             }
@@ -240,14 +197,8 @@ namespace TermFlow.Components.FullScreen
             if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
-            // Barra de instrucciones (Se imprime en la penúltima línea)
-            buffer.Append("  ");
-            if (selectedMap != null) buffer.Append($"{ThemeColors.Warning}Space{ThemeColors.Reset} marcar  ");
-            buffer.Append($"{ThemeColors.Warning}↑↓/j/k{ThemeColors.Reset} navegar  {ThemeColors.Warning}MouseWheel{ThemeColors.Reset} scroll  {ThemeColors.Warning}Enter/c{ThemeColors.Reset} confirmar  {ThemeColors.Warning}Esc/q{ThemeColors.Reset} salir");
-            buffer.Append("\x1b[K\n"); // Salta a la última línea absoluta
-
-            // Última línea: la limpiamos pero NO ponemos \n para evitar el scroll del buffer.
-            // Esto la mantiene vacía y genera la separación del fondo.
+            router.RenderFooter(buffer);
+            buffer.Append("\x1b[K\n");
             buffer.Append("\x1b[K");
 
             Console.Write(buffer.ToString());

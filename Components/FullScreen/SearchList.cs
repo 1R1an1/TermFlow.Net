@@ -26,20 +26,31 @@ namespace TermFlow.Components.FullScreen
 
                 ScrollState layout = new ScrollState();
                 bool shouldRender = true;
-
+                bool exit = false;
+                int result = -1;
                 var filtered = new List<(string Text, int OriginalIndex)>();
 
-                while (!token.IsCancellationRequested)
+                var router = new InputRouter()
+                    .BindCancel(() => { result = -1; exit = true; })
+                    .BindConfirm(() => { if (filtered.Count > 0) { result = filtered[cursor].OriginalIndex; exit = true; } }, "elegir")
+                    .BindNavigate(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
+                    .BindScroll(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
+                    .Bind(ConsoleKey.Backspace, "Backspace", "borrar", () =>
+                    {
+                        if (query.Length > 0) { query.Remove(query.Length - 1, 1); cursor = 0; }
+                    })
+                    .BindUnhandled("Letras", "filtrar", (key) =>
+                    {
+                        if (!char.IsControl(key.KeyChar)) { query.Append(key.KeyChar); cursor = 0; }
+                    });
+
+                while (!token.IsCancellationRequested && !exit)
                 {
                     filtered.Clear();
                     string currentQuery = query.ToString();
                     for (int i = 0; i < items.Length; i++)
-                    {
                         if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
-                        {
                             filtered.Add((items[i], i));
-                        }
-                    }
 
                     if (layout.Update(cursor, filtered.Count, ReservedRows))
                     {
@@ -49,72 +60,23 @@ namespace TermFlow.Components.FullScreen
                     cursor = layout.Cursor;
                     if (shouldRender)
                     {
-                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
+                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, null, router);
                         shouldRender = false;
                     }
 
                     var inputEvent = InputReader.ReadInput();
-
                     if (inputEvent.Type != InputEventType.None)
                     {
                         shouldRender = true;
-
-                        if (inputEvent.Type == InputEventType.Key)
-                        {
-                            var key = inputEvent.KeyInfo;
-
-                            if (key.Key == ConsoleKey.Escape) return -1;
-
-                            if (key.Key == ConsoleKey.Enter)
-                            {
-                                return filtered.Count > 0 ? filtered[cursor].OriginalIndex : -1;
-                            }
-
-                            if (key.Key == ConsoleKey.UpArrow)
-                            {
-                                if (cursor > 0) cursor--;
-                            }
-                            else if (key.Key == ConsoleKey.DownArrow)
-                            {
-                                if (cursor < filtered.Count - 1) cursor++;
-                            }
-                            else if (key.Key == ConsoleKey.Backspace)
-                            {
-                                if (query.Length > 0)
-                                {
-                                    query.Remove(query.Length - 1, 1);
-                                    cursor = 0;
-                                }
-                            }
-                            else if (!char.IsControl(key.KeyChar))
-                            {
-                                query.Append(key.KeyChar);
-                                cursor = 0;
-                            }
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollUp)
-                        {
-                            if (cursor > 0) cursor--;
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollDown)
-                        {
-                            if (cursor < filtered.Count - 1) cursor++;
-                        }
+                        router.Handle(inputEvent);
                     }
-
                     await Task.Delay(15, token);
                 }
 
-                return -1;
+                return result;
             }
-            catch (OperationCanceledException)
-            {
-                return -1;
-            }
-            finally
-            {
-                Engine.ExitFullScreen();
-            }
+            catch (OperationCanceledException) { return -1; }
+            finally { Engine.ExitFullScreen(); }
         }
 
         /// <summary>
@@ -131,119 +93,78 @@ namespace TermFlow.Components.FullScreen
 
                 ScrollState layout = new ScrollState();
                 bool shouldRender = true;
-
-                // Inicializar el mapa de seleccionados con los índices originales correspondientes
-                HashSet<int> selectedMap = new HashSet<int>();
-                if (preselected != null)
-                {
-                    for (int i = 0; i < preselected.Length; i++)
-                    {
-                        if (i < items.Length && preselected[i]) selectedMap.Add(i);
-                    }
-                }
-
+                bool exit = false;
+                int[] result = Array.Empty<int>();
                 var filtered = new List<(string Text, int OriginalIndex)>();
 
-                while (!token.IsCancellationRequested)
+                HashSet<int> selectedMap = new HashSet<int>();
+                if (preselected != null)
+                    for (int i = 0; i < preselected.Length; i++)
+                        if (i < items.Length && preselected[i]) selectedMap.Add(i);
+
+                var router = new InputRouter()
+                    .BindCancel(() => { result = Array.Empty<int>(); exit = true; })
+                    .BindConfirm(() =>
+                    {
+                        result = new int[selectedMap.Count];
+                        selectedMap.CopyTo(result); Array.Sort(result); exit = true;
+                    })
+                    .BindSelect(() =>
+                    {
+                        if (filtered.Count > 0)
+                        {
+                            int originalIdx = filtered[cursor].OriginalIndex;
+                            if (selectedMap.Contains(originalIdx)) selectedMap.Remove(originalIdx);
+                            else selectedMap.Add(originalIdx);
+                        }
+                    })
+                    .BindNavigate(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
+                    .BindScroll(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
+                    .Bind(ConsoleKey.Backspace, "Backspace", "borrar", () =>
+                    {
+                        if (query.Length > 0) { query.Remove(query.Length - 1, 1); cursor = 0; }
+                    })
+                    .BindUnhandled("Letras", "filtrar", (key) =>
+                    {
+                        if (!char.IsControl(key.KeyChar)) { query.Append(key.KeyChar); cursor = 0; }
+                    });
+
+                while (!token.IsCancellationRequested && !exit)
                 {
                     filtered.Clear();
                     string currentQuery = query.ToString();
                     for (int i = 0; i < items.Length; i++)
-                    {
                         if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
-                        {
                             filtered.Add((items[i], i));
-                        }
-                    }
 
                     if (layout.Update(cursor, filtered.Count, ReservedRows))
                     {
                         shouldRender = true;
                         Console.Write("\x1b[2J");
                     }
+                    cursor = layout.Cursor;
 
                     if (shouldRender)
                     {
-                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap: null);
+                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
                         shouldRender = false;
                     }
 
                     var inputEvent = InputReader.ReadInput();
-
                     if (inputEvent.Type != InputEventType.None)
                     {
                         shouldRender = true;
-
-                        if (inputEvent.Type == InputEventType.Key)
-                        {
-                            var key = inputEvent.KeyInfo;
-
-                            if (key.Key == ConsoleKey.Escape) return Array.Empty<int>();
-
-                            // Confirmar selección (En modo buscador 'c' escribe, por lo tanto Enter es el único confirmador)
-                            if (key.Key == ConsoleKey.Enter)
-                            {
-                                int[] result = new int[selectedMap.Count];
-                                selectedMap.CopyTo(result);
-                                Array.Sort(result);
-                                return result;
-                            }
-
-                            // Marcar / Desmarcar con la Barra Espaciadora usando el índice original
-                            if (key.Key == ConsoleKey.Spacebar && filtered.Count > 0)
-                            {
-                                int originalIdx = filtered[cursor].OriginalIndex;
-                                if (selectedMap.Contains(originalIdx)) selectedMap.Remove(originalIdx);
-                                else selectedMap.Add(originalIdx);
-                            }
-                            else if (key.Key == ConsoleKey.UpArrow)
-                            {
-                                if (cursor > 0) cursor--;
-                            }
-                            else if (key.Key == ConsoleKey.DownArrow)
-                            {
-                                if (cursor < filtered.Count - 1) cursor++;
-                            }
-                            else if (key.Key == ConsoleKey.Backspace)
-                            {
-                                if (query.Length > 0)
-                                {
-                                    query.Remove(query.Length - 1, 1);
-                                    cursor = 0;
-                                }
-                            }
-                            else if (!char.IsControl(key.KeyChar))
-                            {
-                                query.Append(key.KeyChar);
-                                cursor = 0;
-                            }
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollUp)
-                        {
-                            if (cursor > 0) cursor--;
-                        }
-                        else if (inputEvent.Type == InputEventType.ScrollDown)
-                        {
-                            if (cursor < filtered.Count - 1) cursor++;
-                        }
+                        router.Handle(inputEvent);
                     }
-
                     await Task.Delay(15, token);
                 }
-
-                return Array.Empty<int>();
+                return result;
             }
-            catch (OperationCanceledException)
-            {
-                return Array.Empty<int>();
-            }
-            finally
-            {
-                Engine.ExitFullScreen();
-            }
+            catch (OperationCanceledException) { return Array.Empty<int>(); }
+            finally { Engine.ExitFullScreen(); }
         }
 
-        private static void RenderSearch(StringBuilder buffer, string title, string queryString, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap)
+        private static void RenderSearch(StringBuilder buffer, string title, string queryString, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
 
             buffer.Clear();
@@ -307,12 +228,8 @@ namespace TermFlow.Components.FullScreen
             else buffer.Append("\x1b[K\n");
 
             // Barra de instrucciones contextual interactiva
-            buffer.Append("  ");
-            if (selectedMap != null) buffer.Append($"{ThemeColors.Warning}Space{ThemeColors.Reset} marcar  ");
-            buffer.Append($"{ThemeColors.Warning}Letras{ThemeColors.Reset} filtrar  {ThemeColors.Warning}↑↓/Wheel{ThemeColors.Reset} navegar  {ThemeColors.Warning}Backspace{ThemeColors.Reset} borrar  {ThemeColors.Warning}Enter{ThemeColors.Reset} elegir  {ThemeColors.Warning}Esc{ThemeColors.Reset} salir");
+            router.RenderFooter(buffer);
             buffer.Append("\x1b[K\n");
-
-            // Última línea libre (Separación estética del borde negro inferior)
             buffer.Append("\x1b[K");
 
             Console.Write(buffer.ToString());
