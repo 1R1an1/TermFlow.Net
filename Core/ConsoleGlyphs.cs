@@ -5,6 +5,8 @@ public static class ConsoleGlyphs
     // Símbolos
     public static string Indicator { get; set; } = "▶";
     public static string Checked { get; set; } = "✔";
+    public static string Error { get; set; } = "✖";
+    public static string Warning { get; set; } = "⚠";
     public static string Unchecked { get; set; } = "○";
     public static string InfoBullet { get; set; } = "●";
 

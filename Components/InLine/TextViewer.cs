@@ -25,10 +25,10 @@ namespace TermFlow.Components.InLine
             => $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} {msg}";
 
         public static string WarnF(string msg, bool allColor = true)
-            => $"{ThemeColors.Warning}!" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}");
+            => $"{ThemeColors.Warning}{ConsoleGlyphs.Warning}" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}");
 
         public static string ErrorF(string msg, bool allColor = true)
-            => $"{ThemeColors.Error}✘" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}");
+            => $"{ThemeColors.Error}{ConsoleGlyphs.Error}" + (allColor ? $" {msg}{ThemeColors.Reset}" : $"{ThemeColors.Reset} {msg}");
 
         public static void WritePlain(string msg)
             => WriteToOutput(msg);
