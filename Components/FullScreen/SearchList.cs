@@ -35,10 +35,10 @@ namespace TermFlow.Components.FullScreen
                     .BindConfirm(() => { if (filtered.Count > 0) { result = filtered[cursor].OriginalIndex; exit = true; } }, "elegir")
                     .BindNavigate(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
                     .BindScroll(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
-                    .Bind(ConsoleKey.Backspace, "Backspace", "borrar", () =>
+                    .Bind("Backspace", "borrar", () =>
                     {
                         if (query.Length > 0) { query.Remove(query.Length - 1, 1); cursor = 0; }
-                    })
+                    }, ConsoleKey.Backspace)
                     .BindUnhandled("Letras", "filtrar", (key) =>
                     {
                         if (!char.IsControl(key.KeyChar)) { query.Append(key.KeyChar); cursor = 0; }
@@ -120,10 +120,10 @@ namespace TermFlow.Components.FullScreen
                     })
                     .BindNavigate(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
                     .BindScroll(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
-                    .Bind(ConsoleKey.Backspace, "Backspace", "borrar", () =>
+                    .Bind("Backspace", "borrar", () =>
                     {
                         if (query.Length > 0) { query.Remove(query.Length - 1, 1); cursor = 0; }
-                    })
+                    }, ConsoleKey.Backspace)
                     .BindUnhandled("Letras", "filtrar", (key) =>
                     {
                         if (!char.IsControl(key.KeyChar)) { query.Append(key.KeyChar); cursor = 0; }

@@ -64,9 +64,11 @@ namespace TermFlow.Core
         /// <summary>
         /// Vincula una tecla física (ConsoleKey) a una acción, registrando su comportamiento en el footer.
         /// </summary>
-        public InputRouter Bind(ConsoleKey key, string keyDisplay, string actionDisplay, Action handler)
+        public InputRouter Bind(string keyDisplay, string actionDisplay, Action handler, ConsoleKey key, params ConsoleKey[] keys)
         {
             _keyHandlers[key] = handler;
+            foreach (var kei in keys)
+                _keyHandlers[kei] = handler;
             RegisterFooterLabel(keyDisplay, actionDisplay);
             return this;
         }
@@ -74,9 +76,11 @@ namespace TermFlow.Core
         /// <summary>
         /// Vincula un carácter exacto (sensible a mayúsculas) a una acción, registrando su comportamiento en el footer.
         /// </summary>
-        public InputRouter BindChar(char keyChar, string keyDisplay, string actionDisplay, Action handler)
+        public InputRouter BindChar(string keyDisplay, string actionDisplay, Action handler, char keyChar, params char[] keysChar)
         {
             _charHandlers[keyChar] = handler;
+            foreach (var keiChar in keysChar)
+                _charHandlers[keiChar] = handler;
             RegisterFooterLabel(keyDisplay, actionDisplay);
             return this;
         }
@@ -95,32 +99,32 @@ namespace TermFlow.Core
 
         public InputRouter BindNavigate(Action onUp, Action onDown, string description = "navegar")
         {
-            Bind(ConsoleKey.UpArrow, "↑↓", description, onUp);
-            Bind(ConsoleKey.DownArrow, "", description, onDown); // El string vacío evita duplicar flechas en el Join
+            Bind("↑↓", description, onUp, ConsoleKey.UpArrow);
+            Bind("", description, onDown, ConsoleKey.DownArrow); // El string vacío evita duplicar flechas en el Join
             if (!_enableDefaultChars) return this;
-            BindChar('j', "j", description, onDown);
-            BindChar('k', "k", description, onUp);
+            Bind("j", description, onDown, ConsoleKey.J);
+            Bind("k", description, onUp, ConsoleKey.K);
             return this;
         }
 
         public InputRouter BindSelect(Action onSelect, string description = "marcar")
         {
-            return Bind(ConsoleKey.Spacebar, "Space", description, onSelect);
+            return Bind("Space", description, onSelect, ConsoleKey.Spacebar);
         }
 
         public InputRouter BindConfirm(Action onConfirm, string description = "confirmar")
         {
-            Bind(ConsoleKey.Enter, "Enter", description, onConfirm);
+            Bind("Enter", description, onConfirm, ConsoleKey.Enter);
             if (!_enableDefaultChars) return this;
-            BindChar('c', "c", description, onConfirm);
+            Bind("c", description, onConfirm, ConsoleKey.C);
             return this;
         }
 
         public InputRouter BindCancel(Action onCancel, string description = "salir")
         {
-            Bind(ConsoleKey.Escape, "Esc", description, onCancel);
+            Bind("Esc", description, onCancel, ConsoleKey.Escape);
             if (!_enableDefaultChars) return this;
-            BindChar('q', "q", description, onCancel);
+            Bind("q", description, onCancel, ConsoleKey.Q);
             return this;
         }
 

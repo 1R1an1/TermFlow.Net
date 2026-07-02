@@ -38,8 +38,8 @@ namespace TermFlow.Components.FullScreen
                         () => { if (cursor > 0) cursor--; },
                         () => { if (cursor < items.Length - 1) cursor++; }
                     )
-                    .BindChar('g', "g/G", "extremos", () => cursor = 0)
-                    .BindChar('G', "", "", () => cursor = items.Length - 1);
+                    .BindChar("g/G", "extremos", () => cursor = 0, 'g')
+                    .BindChar("", "", () => cursor = items.Length - 1, 'G');
 
                 while (!token.IsCancellationRequested && !exit)
                 {
@@ -108,8 +108,8 @@ namespace TermFlow.Components.FullScreen
                         () => { if (cursor > 0) cursor--; },
                         () => { if (cursor < items.Length - 1) cursor++; }
                     )
-                    .BindChar('g', "g/G", "extremos", () => cursor = 0)
-                    .BindChar('G', "", "", () => cursor = items.Length - 1)
+                    .BindChar("g/G", "extremos", () => cursor = 0, 'g')
+                    .BindChar("", "", () => cursor = items.Length - 1, 'G')
                     .BindCancel(() => { result = Array.Empty<int>(); exit = true; })
                     .BindConfirm(() =>
                     {

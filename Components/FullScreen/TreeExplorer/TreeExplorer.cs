@@ -151,7 +151,76 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
             List<ExplorerEntry> entries = await FetchEntriesAsync(dataSource, currentNode, token);
 
-            while (!token.IsCancellationRequested)
+            bool exit = false; string[] result = Array.Empty<string>();
+            bool nodeChanged = false; // Control de estado para carga asíncrona
+
+            var router = new InputRouter()
+                .BindCancel(() => { result = Array.Empty<string>(); exit = true; })
+                .BindNavigate(
+                    () => { if (cursor > 0) cursor--; },
+                    () => { if (entries.Count > 0 && cursor < entries.Count - 1) cursor++; }
+                )
+                .BindScroll(
+                    () => { if (cursor > 0) cursor--; },
+                    () => { if (entries.Count > 0 && cursor < entries.Count - 1) cursor++; }
+                );
+
+
+            router.Bind("l/→/Enter", isMulti ? "entrar" : "entrar/elegir", () =>
+            {
+                if (entries.Count == 0) return;
+                ExplorerEntry selected = entries[cursor];
+                if (selected.IsDirectory)
+                {
+                    currentNode = selected.Id;
+                    nodeChanged = true;
+                    cursor = 0;
+                }
+                else if (!isMulti && filter != ExplorerFilter.OnlyFolders)
+                {
+                    result = [selected.Id];
+                    exit = true;
+                }
+            }, ConsoleKey.L, ConsoleKey.RightArrow, ConsoleKey.Enter);
+
+
+            router.Bind("h/←", "volver", () =>
+            {
+                string parent = dataSource.GetParent(currentNode);
+                if (!string.IsNullOrEmpty(parent))
+                    currentNode = parent; nodeChanged = true; cursor = 0;
+            }, ConsoleKey.H, ConsoleKey.LeftArrow);
+
+            if (isMulti)
+            {
+                router.BindSelect(() =>
+                {
+                    if (entries.Count == 0) return;
+                    var target = entries[cursor];
+                    if (filter == ExplorerFilter.OnlyFolders && !target.IsDirectory) return;
+                    if (filter == ExplorerFilter.OnlyFiles && target.IsDirectory) return;
+                    ToggleSelection(target.Id, marked, unmarkedExceptions, dataSource);
+                });
+
+                router.Bind("c", "Confirmar", () =>
+                {
+                    var optimized = dataSource.ResolveMarkedEntries(marked, unmarkedExceptions, filter);
+                    result = optimized ?? ResolveMarkedEntriesUniversal(dataSource, marked, unmarkedExceptions, filter);
+                    exit = true;
+                }, ConsoleKey.C);
+            }
+            else
+            {
+                router.BindSelect(() =>
+                {
+                    if (entries.Count == 0) return;
+                    ExplorerEntry target = entries[cursor];
+                    if (target.IsDirectory && filter != ExplorerFilter.OnlyFiles) { result = new[] { target.Id }; exit = true; }
+                    if (!target.IsDirectory && filter != ExplorerFilter.OnlyFolders) { result = new[] { target.Id }; exit = true; }
+                }, "elegir");
+            }
+
+            while (!token.IsCancellationRequested && !exit)
             {
                 if (layout.Update(cursor, entries.Count, ReservedRows))
                 {
@@ -162,7 +231,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
                 if (shouldRender)
                 {
-                    RenderTree(buffer, title, currentNode, entries, layout.Cursor, layout.Scroll, layout.VisibleRows, isMulti, filter, marked, unmarkedExceptions, dataSource);
+                    RenderTree(buffer, title, currentNode, entries, layout.Cursor, layout.Scroll, layout.VisibleRows, isMulti, filter, marked, unmarkedExceptions, dataSource, router);
                     shouldRender = false;
                 }
 
@@ -170,92 +239,23 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                 if (inputEvent.Type != InputEventType.None)
                 {
                     shouldRender = true;
+                    router.Handle(inputEvent);
 
-                    if (inputEvent.Type == InputEventType.Key)
+                    if (nodeChanged)
                     {
-                        var key = inputEvent.KeyInfo;
-
-                        if (key.Key == ConsoleKey.Escape || key.KeyChar == 'q' || key.KeyChar == 'Q')
-                            return Array.Empty<string>();
-
-                        if (isMulti && (key.KeyChar == 'c' || key.KeyChar == 'C'))
-                        {
-                            // Usa la versión optimizada si el datasource la provee
-                            var optimized = dataSource.ResolveMarkedEntries(marked, unmarkedExceptions, filter);
-                            return optimized ?? ResolveMarkedEntriesUniversal(dataSource, marked, unmarkedExceptions, filter);
-                        }
-
-                        if (key.Key == ConsoleKey.DownArrow || key.KeyChar == 'j' || key.KeyChar == 'J')
-                        {
-                            if (entries.Count > 0 && cursor < entries.Count - 1) cursor++;
-                        }
-                        else if (key.Key == ConsoleKey.UpArrow || key.KeyChar == 'k' || key.KeyChar == 'K')
-                        {
-                            if (cursor > 0) cursor--;
-                        }
-                        else if (key.Key == ConsoleKey.Enter || key.Key == ConsoleKey.RightArrow || key.KeyChar == 'l' || key.KeyChar == 'L')
-                        {
-                            if (entries.Count > 0)
-                            {
-                                ExplorerEntry selected = entries[cursor];
-                                if (selected.IsDirectory && key.Key != ConsoleKey.Spacebar)
-                                {
-                                    currentNode = selected.Id;
-                                    entries = await FetchEntriesAsync(dataSource, currentNode, token);
-                                    cursor = 0;
-                                }
-                                else if (!isMulti)
-                                {
-                                    if (!selected.IsDirectory && filter != ExplorerFilter.OnlyFolders)
-                                        return new[] { selected.Id };
-                                }
-                            }
-                        }
-                        else if (key.Key == ConsoleKey.LeftArrow || key.KeyChar == 'h' || key.KeyChar == 'H')
-                        {
-                            string parent = dataSource.GetParent(currentNode);
-                            if (!string.IsNullOrEmpty(parent))
-                            {
-                                currentNode = parent;
-                                entries = await FetchEntriesAsync(dataSource, currentNode, token);
-                                cursor = 0;
-                            }
-                        }
-                        else if (key.Key == ConsoleKey.Spacebar && entries.Count > 0)
-                        {
-                            ExplorerEntry target = entries[cursor];
-                            if (!isMulti)
-                            {
-                                if (target.IsDirectory && filter != ExplorerFilter.OnlyFiles) return new[] { target.Id };
-                                if (!target.IsDirectory && filter != ExplorerFilter.OnlyFolders) return new[] { target.Id };
-                            }
-                            else
-                            {
-                                if (filter == ExplorerFilter.OnlyFolders && !target.IsDirectory) continue;
-                                if (filter == ExplorerFilter.OnlyFiles && target.IsDirectory) continue;
-                                ToggleSelection(target.Id, marked, unmarkedExceptions, dataSource);
-                            }
-                        }
-                    }
-                    else if (inputEvent.Type == InputEventType.ScrollUp)
-                    {
-                        if (cursor > 0) cursor--;
-                    }
-                    else if (inputEvent.Type == InputEventType.ScrollDown)
-                    {
-                        if (entries.Count > 0 && cursor < entries.Count - 1) cursor++;
+                        entries = await FetchEntriesAsync(dataSource, currentNode, token);
+                        nodeChanged = false;
                     }
                 }
-
                 await Task.Delay(15, token);
             }
 
-            return Array.Empty<string>();
+            return result;
         }
 
         private static void RenderTree(StringBuilder buffer, string title, string currentDir, List<ExplorerEntry> entries,
             int cursor, int scroll, int visibleRows, bool isMulti, ExplorerFilter filter,
-            HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource)
+            HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource, InputRouter router)
         {
             buffer.Clear().Append("\x1b[H");
 
@@ -321,16 +321,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
-            buffer.Append("  ");
-            if (isMulti)
-            {
-                buffer.Append($"{ThemeColors.Warning}Space{ThemeColors.Reset} marcar   {ThemeColors.Warning}h/j/k/l/←→{ThemeColors.Reset} navegar   {ThemeColors.Warning}c{ThemeColors.Reset} confirmar   {ThemeColors.Warning}Esc/q{ThemeColors.Reset} salir");
-            }
-            else
-            {
-                string helpKey = filter == ExplorerFilter.OnlyFiles ? "Enter" : "Space/Enter";
-                buffer.Append($"{ThemeColors.Warning}{helpKey}{ThemeColors.Reset} elegir   {ThemeColors.Warning}h/j/k/l/←→{ThemeColors.Reset} navegar   {ThemeColors.Warning}Esc/q{ThemeColors.Reset} salir");
-            }
+            router.RenderFooter(buffer);
             buffer.Append("\x1b[K\n");
             buffer.Append("\x1b[K");
 
