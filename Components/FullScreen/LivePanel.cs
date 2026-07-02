@@ -171,7 +171,7 @@ namespace TermFlow.Components.FullScreen
                     {
                         lastWidth = Console.WindowWidth;
                         lastHeight = Console.WindowHeight;
-                        // No es necesario limpiar con \x1b[2J porque sobrescribimos todo
+                        sb.Append("\x1b[2J");
                     }
 
                     int width = lastWidth;
@@ -211,7 +211,7 @@ namespace TermFlow.Components.FullScreen
                     int lineIndex = 0;
                     int visibleStart = Math.Max(0, totalLines - height - _scrollOffset);
                     int visibleEnd = Math.Min(totalLines, visibleStart + height);
-                    int remaining = height - (visibleEnd - visibleStart);
+
 
                     for (int i = 0; i < wrappedLines.Count && lineIndex < visibleEnd; i++)
                     {
@@ -221,20 +221,15 @@ namespace TermFlow.Components.FullScreen
                             if (lineIndex >= visibleStart && lineIndex < visibleEnd)
                             {
                                 sb.Append(lines[j]).Append("\x1b[K");
-                                if (remaining > 0 || lineIndex < visibleEnd - 1) sb.Append("\n");
-
+                                if (lineIndex < visibleEnd - 1) sb.Append("\n");
                             }
                             lineIndex++;
                             if (lineIndex >= visibleEnd) break;
                         }
                     }
 
-                    // Limpiar líneas sobrantes
-                    for (int i = 0; i < remaining; i++)
-                    {
-                        sb.Append("\x1b[K");
-                        if (i < remaining - 1) sb.Append("\n");
-                    }
+                    //Limpia la consola del cursor hacia abajo eliminando residuos
+                    sb.Append("\x1b[J");
 
                     Console.Write(sb.ToString());
                 }
