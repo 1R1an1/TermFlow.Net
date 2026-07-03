@@ -127,7 +127,7 @@ namespace TermFlow.Components.InLine
                     }
                 }
                 catch (OperationCanceledException) { }
-            }, internalCts.Token);
+            });
 
             try
             {
