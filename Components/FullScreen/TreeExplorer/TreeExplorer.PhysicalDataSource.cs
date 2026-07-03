@@ -43,10 +43,12 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                 var resolved = new List<string>();
                 foreach (var path in marked)
                     if (!IsDirectory(path))
+                    {
                         if (filter != ExplorerFilter.OnlyFolders && IsPathMarked(path, marked, unmarkedExceptions, this))
                             resolved.Add(path);
-                        else
-                            TraversePhysical(path, filter, marked, unmarkedExceptions, resolved);
+                    }
+                    else
+                        TraversePhysical(path, filter, marked, unmarkedExceptions, resolved);
 
                 return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
             }

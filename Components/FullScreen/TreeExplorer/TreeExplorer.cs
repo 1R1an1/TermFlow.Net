@@ -58,9 +58,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                         resolved.Add(path);
                 }
                 else
-                {
                     TraverseUniversal(path, source, filter, marked, unmarkedExceptions, resolved);
-                }
             }
             return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
         }
@@ -151,7 +149,8 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
             List<ExplorerEntry> entries = await FetchEntriesAsync(dataSource, currentNode, token);
 
-            bool exit = false; string[] result = Array.Empty<string>();
+            bool exit = false;
+            string[] result = Array.Empty<string>();
             bool nodeChanged = false; // Control de estado para carga asíncrona
 
             var router = new InputRouter()
