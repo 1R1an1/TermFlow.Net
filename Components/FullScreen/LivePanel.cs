@@ -36,13 +36,16 @@ namespace TermFlow.Components.FullScreen
         private static readonly SemaphoreSlim _keySignal = new(0);
         private static CancellationTokenSource _cts;
         private static bool _isActive = false;
+        private static int? _maxLogs;
         private static readonly object _lock = new();
 
         public static bool IsActive => _isActive;
 
-        public static void Start()
+        public static void Start(int? maxLogs = null)
         {
             if (_isActive) return;
+
+            _maxLogs = maxLogs;
             _isActive = true;
 
             _cts = new CancellationTokenSource();
@@ -86,6 +89,12 @@ namespace TermFlow.Components.FullScreen
                 var entry = new LogEntry(id, content, false);
                 _history.Add(entry);
 
+                if (_maxLogs.HasValue)
+                {
+                    while (_history.Count > _maxLogs.Value)
+                        _history.RemoveAt(0);
+                }
+
                 int physicalLines = content.CountPhysicalLines(Console.WindowWidth);
                 if (_scrollOffset > 0) _scrollOffset += physicalLines;
             }
@@ -100,6 +109,12 @@ namespace TermFlow.Components.FullScreen
                 id = Interlocked.Increment(ref _nextId);
                 var entry = new LogEntry(id, initialContent, true);
                 _history.Add(entry);
+
+                if (_maxLogs.HasValue)
+                {
+                    while (_history.Count > _maxLogs.Value)
+                        _history.RemoveAt(0);
+                }
 
                 if (_scrollOffset > 0) _scrollOffset += initialContent.CountPhysicalLines(Console.WindowWidth);
             }
@@ -270,6 +285,8 @@ namespace TermFlow.Components.FullScreen
                         }
                         RequestRender();
                     }
+                    else if (evt.Type == InputEventType.Key && evt.KeyInfo.Key == ConsoleKey.PageDown)
+                        _scrollOffset = 0;
 
                     if (evt.Type == InputEventType.Key)
                     {
