@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,15 +20,32 @@ namespace TermFlow.Components.FullScreen
             public string Suffix { get; set; } = string.Empty;
             public string FullText => $"{Prefix}{Content}{Suffix}";
 
+            // --- SISTEMA DE CACHÉ PARA EVITAR RE-CÁLCULOS ---
+            public List<string> CachedWrappedLines { get; private set; } = new();
+            public int PhysicalLineCount => CachedWrappedLines.Count;
+            private int _lastConsoleWidth = -1;
+
             public LogEntry(long id, string content, bool isDynamic)
             {
                 Id = id;
                 Content = content;
                 IsDynamic = isDynamic;
             }
+
+            public void RefreshCache(int consoleWidth, bool force = false)
+            {
+                if (force || _lastConsoleWidth != consoleWidth || CachedWrappedLines.Count == 0)
+                {
+                    CachedWrappedLines = FullText.WrapText(consoleWidth);
+                    _lastConsoleWidth = consoleWidth;
+                }
+            }
         }
 
         private static List<LogEntry> _history = new();
+
+        // Búsqueda O(1) ultra rápida
+        private static Dictionary<long, LogEntry> _entryLookup = new();
         private static long _nextId = 0;
         private static int _scrollOffset = 0; // Líneas físicas scrolleadas
         private static SemaphoreSlim _renderSignal = new(0, 1);
@@ -73,6 +91,7 @@ namespace TermFlow.Components.FullScreen
             lock (_lock)
             {
                 _history.Clear();
+                _entryLookup.Clear();
                 _nextId = 0;
                 _scrollOffset = 0;
 
@@ -87,16 +106,24 @@ namespace TermFlow.Components.FullScreen
             {
                 long id = Interlocked.Increment(ref _nextId);
                 var entry = new LogEntry(id, content, false);
+
+                // Pre-calcular caché al instante
+                entry.RefreshCache(Console.WindowWidth);
+
                 _history.Add(entry);
+                _entryLookup[id] = entry;
 
                 if (_maxLogs.HasValue)
                 {
                     while (_history.Count > _maxLogs.Value)
+                    {
+                        var removed = _history[0];
                         _history.RemoveAt(0);
+                        _entryLookup.Remove(removed.Id);
+                    }
                 }
 
-                int physicalLines = content.CountPhysicalLines(Console.WindowWidth);
-                if (_scrollOffset > 0) _scrollOffset += physicalLines;
+                if (_scrollOffset > 0) _scrollOffset += entry.PhysicalLineCount;
             }
             RequestRender();
         }
@@ -108,15 +135,24 @@ namespace TermFlow.Components.FullScreen
             {
                 id = Interlocked.Increment(ref _nextId);
                 var entry = new LogEntry(id, initialContent, true);
+
+                // Pre-calcular caché
+                entry.RefreshCache(Console.WindowWidth);
+
                 _history.Add(entry);
+                _entryLookup[id] = entry;
 
                 if (_maxLogs.HasValue)
                 {
                     while (_history.Count > _maxLogs.Value)
+                    {
+                        var removed = _history[0];
                         _history.RemoveAt(0);
+                        _entryLookup.Remove(removed.Id);
+                    }
                 }
 
-                if (_scrollOffset > 0) _scrollOffset += initialContent.CountPhysicalLines(Console.WindowWidth);
+                if (_scrollOffset > 0) _scrollOffset += entry.PhysicalLineCount;
             }
             RequestRender();
             return id;
@@ -129,30 +165,39 @@ namespace TermFlow.Components.FullScreen
             if (prefix != null) entry.Prefix = prefix;
             if (suffix != null) entry.Suffix = suffix;
         });
-        public static (string prefix, string suffix) GetDecorations(long id) =>
-            _history.Find(e => e.Id == id) is { } entry ? (entry.Prefix, entry.Suffix) : (string.Empty, string.Empty);
+        public static (string prefix, string suffix) GetDecorations(long id)
+        {
+            lock (_lock)
+            {
+                return _entryLookup.TryGetValue(id, out var entry)
+                    ? (entry.Prefix, entry.Suffix)
+                    : (string.Empty, string.Empty);
+            }
+        }
 
 
         private static void ApplyUpdate(long id, Action<LogEntry> updateAction)
         {
             lock (_lock)
             {
-                // Buscar el elemento
-                var entry = _history.Find(e => e.Id == id);
-                if (entry == null) return;
+                // 1. Búsqueda O(1) instantánea (Sin recorrer listas)
+                if (!_entryLookup.TryGetValue(id, out var entry)) return;
 
                 int width = Console.WindowWidth;
 
-                // 1. Calcular líneas antes de la actualización
-                int oldLines = entry.FullText.CountPhysicalLines(width);
+                // 2. Líneas antes (leyendo de la caché, rapidísimo)
+                int oldLines = entry.PhysicalLineCount;
 
-                // 2. Ejecutar la modificación específica
+                // 3. Ejecutar modificación
                 updateAction(entry);
 
-                // 3. Calcular líneas después de la actualización
-                int newLines = entry.FullText.CountPhysicalLines(width);
+                // 4. Forzar re-cálculo de la caché SOLO para este elemento
+                entry.RefreshCache(width, force: true);
 
-                // 4. Ajustar scroll si la altura varió
+                // 5. Líneas después
+                int newLines = entry.PhysicalLineCount;
+
+                // 6. Ajustar scroll
                 int difference = newLines - oldLines;
                 if (_scrollOffset > 0 && difference != 0)
                 {
@@ -181,52 +226,46 @@ namespace TermFlow.Components.FullScreen
                     await _renderSignal.WaitAsync(token);
                     Interlocked.Exchange(ref _renderPending, 0);
 
-                    // Detectar redimensionamiento
-                    if (Console.WindowWidth != lastWidth || Console.WindowHeight != lastHeight)
+                    int width = Console.WindowWidth;
+                    int height = Console.WindowHeight;
+
+                    // Si la consola cambia de tamaño, recalculamos todo el historial
+                    bool widthChanged = false;
+                    if (width != lastWidth || height != lastHeight)
                     {
-                        lastWidth = Console.WindowWidth;
-                        lastHeight = Console.WindowHeight;
-                        sb.Append("\x1b[2J");
+                        lastWidth = width;
+                        lastHeight = height;
+                        widthChanged = true;
+                        sb.Append("\x1b[2J"); // Limpiar pantalla
                     }
 
-                    int width = lastWidth;
-                    int height = lastHeight;
-
-                    // Calcular total de líneas físicas y ajustar scroll
                     List<List<string>> wrappedLines = new List<List<string>>();
                     int totalLines = 0;
                     int currentScroll;
+
                     lock (_lock)
                     {
                         foreach (var entry in _history)
                         {
-                            var lines = entry.FullText.WrapText(width);
-                            wrappedLines.Add(lines);
-                            totalLines += lines.Count;
+                            if (widthChanged) entry.RefreshCache(width);
+
+                            wrappedLines.Add(entry.CachedWrappedLines);
+                            totalLines += entry.PhysicalLineCount;
                         }
 
                         int maxScroll = Math.Max(0, totalLines - height);
-
-                        // Si _scrollOffset es mayor que maxScroll, ajustar
-                        if (_scrollOffset > maxScroll)
-                            _scrollOffset = maxScroll;
-
-                        // Si _scrollOffset es negativo, poner en 0
-                        if (_scrollOffset < 0)
-                            _scrollOffset = 0;
-
+                        if (_scrollOffset > maxScroll) _scrollOffset = maxScroll;
+                        if (_scrollOffset < 0) _scrollOffset = 0;
                         currentScroll = _scrollOffset;
                     }
-
 
                     // Construir buffer visible
                     sb.Clear();
                     sb.Append("\x1b[H");
 
                     int lineIndex = 0;
-                    int visibleStart = Math.Max(0, totalLines - height - _scrollOffset);
+                    int visibleStart = Math.Max(0, totalLines - height - currentScroll);
                     int visibleEnd = Math.Min(totalLines, visibleStart + height);
-
 
                     for (int i = 0; i < wrappedLines.Count && lineIndex < visibleEnd; i++)
                     {
@@ -243,9 +282,7 @@ namespace TermFlow.Components.FullScreen
                         }
                     }
 
-                    //Limpia la consola del cursor hacia abajo eliminando residuos
                     sb.Append("\x1b[J");
-
                     Console.Write(sb.ToString());
                 }
             }
@@ -260,33 +297,32 @@ namespace TermFlow.Components.FullScreen
                 {
                     var evt = InputReader.ReadInput();
 
-                    if (evt.Type == InputEventType.ScrollUp ||
-                        (evt.Type == InputEventType.Key && evt.KeyInfo.Key == ConsoleKey.UpArrow))
+                    int delta = 0;
+                    if (evt.Type == InputEventType.ScrollUp || evt.KeyInfo.Key == ConsoleKey.UpArrow)
+                        delta = (evt.Type == InputEventType.ScrollUp) ? 3 : 1;
+                    else if (evt.Type == InputEventType.ScrollDown || evt.KeyInfo.Key == ConsoleKey.DownArrow)
+                        delta = (evt.Type == InputEventType.ScrollDown) ? -3 : -1;
+                    else if (evt.KeyInfo.Key == ConsoleKey.PageUp)
+                        delta = int.MaxValue;  // Señal para ir al máximo scroll
+                    else if (evt.KeyInfo.Key == ConsoleKey.PageDown)
+                        delta = int.MinValue;  // Señal para ir al scroll 0
+
+                    if (delta != 0)
                     {
                         lock (_lock)
                         {
-                            // Calcular total de líneas físicas
-                            int totalLines = 0;
-                            foreach (var entry in _history)
-                                totalLines += entry.FullText.CountPhysicalLines(Console.WindowWidth);
+                            int totalLines = _history.Sum(e => e.PhysicalLineCount);
                             int maxScroll = Math.Max(0, totalLines - Console.WindowHeight);
-                            if (_scrollOffset < maxScroll)
-                                _scrollOffset++;
+
+                            if (delta == int.MaxValue)
+                                _scrollOffset = maxScroll;   // PageUp
+                            else if (delta == int.MinValue)
+                                _scrollOffset = 0;           // PageDown
+                            else
+                                _scrollOffset = Math.Clamp(_scrollOffset + delta, 0, maxScroll);
                         }
                         RequestRender();
                     }
-                    else if (evt.Type == InputEventType.ScrollDown ||
-                             (evt.Type == InputEventType.Key && evt.KeyInfo.Key == ConsoleKey.DownArrow))
-                    {
-                        lock (_lock)
-                        {
-                            if (_scrollOffset > 0)
-                                _scrollOffset--;
-                        }
-                        RequestRender();
-                    }
-                    else if (evt.Type == InputEventType.Key && evt.KeyInfo.Key == ConsoleKey.PageDown)
-                        _scrollOffset = 0;
 
                     if (evt.Type == InputEventType.Key)
                     {
@@ -294,7 +330,7 @@ namespace TermFlow.Components.FullScreen
                         _keySignal.Release(); // Sube el contador del semáforo y despierta la tarea
                     }
 
-                    await Task.Delay(15, token);
+                    await Task.Delay(7, token);
                 }
             }
             catch (OperationCanceledException) { }
