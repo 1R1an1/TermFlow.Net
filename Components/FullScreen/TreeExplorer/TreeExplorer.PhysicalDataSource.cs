@@ -25,7 +25,9 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                     var di = new DirectoryInfo(id);
                     if (!di.Exists) return list;
 
-                    var infos = di.GetFileSystemInfos().OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
+                    var infos = di.GetFileSystemInfos()
+                    .Where(i => (i.Attributes & FileAttributes.ReparsePoint) == 0)
+                    .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
                     foreach (var info in infos)
                     {
                         bool isDir = (info.Attributes & FileAttributes.Directory) == FileAttributes.Directory;
@@ -67,7 +69,13 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                                 resolved.Add(file);
 
                     foreach (var subDir in Directory.GetDirectories(dir))
+                    {
+                        var attr = File.GetAttributes(subDir);
+                        if ((attr & FileAttributes.ReparsePoint) != 0)
+                            continue;
+
                         TraversePhysical(subDir, filter, marked, unmarkedExceptions, resolved);
+                    }
                 }
                 catch { }
             }
