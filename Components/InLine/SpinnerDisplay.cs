@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,10 +8,24 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.InLine
 {
+    /// <summary>
+    /// Componente de spinner animado en línea. Mientras se ejecuta una tarea de fondo,
+    /// dibuja una secuencia de cuadros Braille hasta que la tarea termina.
+    /// </summary>
     public static class SpinnerDisplay
     {
+        /// <summary>Frames Braille por defecto del spinner.</summary>
         public static readonly string[] DefaultFrames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
 
+        /// <summary>
+        /// Ejecuta un spinner animado mientras corre la tarea indicada. Al terminar,
+        /// imprime un mensaje de éxito. Compatible con modo inline y <see cref="LivePanel"/>.
+        /// </summary>
+        /// <param name="description">Texto a mostrar al lado del spinner.</param>
+        /// <param name="workerTask">Tarea asíncrona de fondo a ejecutar.</param>
+        /// <param name="finalText">Texto final opcional; si es <c>null</c> se usa la descripción + "(Completado)".</param>
+        /// <param name="panelId">ID opcional de línea dinámica del <see cref="LivePanel"/> a reutilizar.</param>
+        /// <param name="token">Token de cancelación externa.</param>
         public static async Task RunAsync(string description, Func<CancellationToken, Task> workerTask, string finalText = null, long? panelId = null, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -7,6 +9,11 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
 {
+    /// <summary>
+    /// Consola interactiva estilo chat (REPL) a pantalla completa.
+    /// Mantiene un historial de logs scrollable con barra divisoria inteligente que avisa
+    /// cuando hay mensajes nuevos abajo, y un input multilínea con soporte para Shift+Enter.
+    /// </summary>
     public class LiveConsole
     {
         private readonly List<string> _logs = new();
@@ -20,6 +27,10 @@ namespace TermFlow.Components.FullScreen
         // El semáforo maestro que despierta a la pantalla solo cuando es necesario
         private readonly SemaphoreSlim _renderSignal = new(1, 1);
 
+        /// <summary>
+        /// Crea una nueva instancia de <see cref="LiveConsole"/>.
+        /// </summary>
+        /// <param name="maxLogs">Cantidad máxima de logs a retener en memoria (FIFO).</param>
         public LiveConsole(int maxLogs = 1000)
         {
             _maxLogs = maxLogs;
@@ -28,6 +39,7 @@ namespace TermFlow.Components.FullScreen
         /// <summary>
         /// Agrega un nuevo log desde cualquier hilo (ej. red en segundo plano).
         /// </summary>
+        /// <param name="message">Texto del log (puede contener ANSI y saltos de línea).</param>
         public void WriteLog(string message)
         {
             lock (_stateLock)
@@ -59,6 +71,7 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="prompt">El texto antes del cursor (ej. ">>> ")</param>
         /// <param name="onInputSubmitted">Callback que se ejecuta cuando el usuario presiona Enter</param>
+        /// <param name="token">Token para cancelar la ejecución.</param>
         public async Task RunAsync(string prompt, Func<string, Task> onInputSubmitted, CancellationToken token = default)
         {
             Engine.EnterFullScreen(); // Nos adueñamos de la pantalla y activamos el mouse
@@ -99,6 +112,9 @@ namespace TermFlow.Components.FullScreen
             }
         }
 
+        /// <summary>
+        /// Libera el semáforo de render solo si está en 0, evitando acumulaciones innecesarias.
+        /// </summary>
         private void RequestRender()
         {
             // Libera el semáforo solo si está en 0 para evitar acumulaciones
@@ -108,6 +124,12 @@ namespace TermFlow.Components.FullScreen
             }
         }
 
+        /// <summary>
+        /// Loop de input que procesa teclado y rueda del mouse, actualizando el buffer
+        /// de entrada y el scroll. Detecta /exit y Escape para cerrar la sesión.
+        /// </summary>
+        /// <param name="cts">Token source interno para cancelar la sesión al recibir /exit o Escape.</param>
+        /// <param name="onInputSubmitted">Callback async que recibe cada mensaje enviado.</param>
         private async Task ProcessInput(CancellationTokenSource cts, Func<string, Task> onInputSubmitted)
         {
             var token = cts.Token;
@@ -201,6 +223,13 @@ namespace TermFlow.Components.FullScreen
             catch (OperationCanceledException) { }
         }
 
+        /// <summary>
+        /// Construye y vuelca un frame completo: logs visibles, barra divisoria inteligente
+        /// (con aviso de mensajes nuevos si corresponde) y el bloque de input multilínea.
+        /// </summary>
+        /// <param name="prompt">Prefijo a mostrar antes del input.</param>
+        /// <param name="width">Ancho actual de la consola.</param>
+        /// <param name="height">Alto actual de la consola.</param>
         private void RenderScreen(string prompt, int width, int height)
         {
             StringBuilder buffer = new StringBuilder(4096);
@@ -311,6 +340,14 @@ namespace TermFlow.Components.FullScreen
             Console.Write(buffer.ToString());
         }
 
+        /// <summary>
+        /// Devuelve las líneas físicas visibles a partir del historial, considerando el scrollOffset.
+        /// Recorre el historial de abajo hacia arriba envolviendo texto a demanda.
+        /// </summary>
+        /// <param name="width">Ancho de consola para el wrapping.</param>
+        /// <param name="maxLines">Cantidad máxima de líneas a devolver.</param>
+        /// <param name="scrollOffset">Líneas a saltar desde el fondo (0 = pegado al presente).</param>
+        /// <returns>Lista de líneas a mostrar en orden cronológico (la más reciente abajo).</returns>
         private List<string> GetVisibleLogLines(int width, int maxLines, int scrollOffset)
         {
             var result = new List<string>();

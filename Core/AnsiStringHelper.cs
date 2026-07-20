@@ -1,14 +1,22 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace TermFlow.Core
 {
+    /// <summary>
+    /// Utilidades de extensión para manipular strings que contienen secuencias ANSI,
+    /// calculando longitud visual, truncando y envolviendo texto sin romper los códigos de color.
+    /// </summary>
     internal static class AnsiStringHelper
     {
         /// <summary>
         /// Elimina todos los códigos ANSI de un string.
         /// </summary>
+        /// <param name="text">Texto con posibles secuencias ANSI.</param>
+        /// <returns>Texto limpio sin ningún código de escape.</returns>
         public static string StripAnsi(this string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
@@ -18,6 +26,8 @@ namespace TermFlow.Core
         /// <summary>
         /// Calcula la longitud visual de un string ignorando códigos ANSI.
         /// </summary>
+        /// <param name="text">Texto con posibles secuencias ANSI.</param>
+        /// <returns>Cantidad de caracteres visibles reales.</returns>
         public static int GetVisualLength(this string text)
         {
             if (string.IsNullOrEmpty(text)) return 0;
@@ -95,12 +105,18 @@ namespace TermFlow.Core
         /// <summary>
         /// Cuenta las líneas físicas que ocupa un texto al ser envuelto.
         /// </summary>
+        /// <param name="text">Texto a evaluar.</param>
+        /// <param name="width">Ancho máximo en caracteres visuales.</param>
+        /// <returns>Cantidad de líneas físicas resultantes.</returns>
         public static int CountPhysicalLines(this string text, int width)
              => WrapText(text, width).Count;
 
         /// <summary>
-        /// Trunca un texto a un número máximo de caracteres visuales, conservando ANSI.
+        /// Trunca un texto a un número máximo de caracteres visibles, conservando ANSI.
         /// </summary>
+        /// <param name="text">Texto original con posibles ANSI.</param>
+        /// <param name="maxLength">Cantidad máxima de caracteres visibles a conservar.</param>
+        /// <returns>Texto truncado manteniendo los códigos ANSI intactos.</returns>
         public static string Truncate(this string text, int maxLength)
         {
             if (string.IsNullOrEmpty(text) || maxLength <= 0) return "";

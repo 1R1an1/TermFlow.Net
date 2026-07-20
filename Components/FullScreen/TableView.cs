@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -6,8 +8,19 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
 {
+    /// <summary>
+    /// Renderizador de tablas con bordes Unicode y ancho de columna automático
+    /// calculado a partir del contenido. Soporta estilo personalizado de cabecera.
+    /// </summary>
     public static class TableView
     {
+        /// <summary>
+        /// Construye y muestra una tabla completa con bordes, cabecera estilizada y filas de datos.
+        /// Si el <see cref="LivePanel"/> está activo, la tabla se vuelca como un solo log.
+        /// </summary>
+        /// <param name="headers">Array con los títulos de cada columna.</param>
+        /// <param name="rows">Lista de filas, cada una con los valores por columna (pueden faltar columnas).</param>
+        /// <param name="headerStyle">Estilo ANSI opcional para la cabecera; si es <c>null</c> usa Cyan+Bold.</param>
         public static void Show(string[] headers, List<string[]> rows, AnsiColor headerStyle = null)
         {
 
@@ -35,6 +48,12 @@ namespace TermFlow.Components.FullScreen
 
         }
 
+        /// <summary>
+        /// Calcula el ancho de cada columna tomando el máximo entre la cabecera y todas las celdas de esa columna.
+        /// </summary>
+        /// <param name="headers">Cabeceras de las columnas.</param>
+        /// <param name="rows">Filas de datos a evaluar.</param>
+        /// <returns>Array de anchos visuales por columna.</returns>
         private static int[] CalculateColumnWidths(string[] headers, List<string[]> rows)
         {
             int[] widths = new int[headers.Length];
@@ -56,6 +75,11 @@ namespace TermFlow.Components.FullScreen
             return widths;
         }
 
+        /// <summary>
+        /// Suma el ancho total interno de la tabla (padding incluido + separadores verticales).
+        /// </summary>
+        /// <param name="colWidths">Anchos por columna.</param>
+        /// <returns>Ancho total en caracteres visibles.</returns>
         private static int CalculateTotalWidth(int[] colWidths)
         {
             int total = 0;
@@ -66,6 +90,13 @@ namespace TermFlow.Components.FullScreen
             return total + (colWidths.Length - 1); // Suma los separadores verticales internos
         }
 
+        /// <summary>
+        /// Appendiza al buffer una línea de borde horizontal con esquinas personalizadas.
+        /// </summary>
+        /// <param name="sb">StringBuilder destino.</param>
+        /// <param name="cornerLeft">Carácter de esquina izquierda.</param>
+        /// <param name="cornerRight">Carácter de esquina derecha.</param>
+        /// <param name="width">Ancho del borde (sin contar esquinas).</param>
         private static void AppendBorder(StringBuilder sb, char cornerLeft, char cornerRight, int width)
         {
 
@@ -77,6 +108,13 @@ namespace TermFlow.Components.FullScreen
               .Append('\n');
         }
 
+        /// <summary>
+        /// Appendiza la fila de cabeceras con padding y estilo ANSI personalizado.
+        /// </summary>
+        /// <param name="sb">StringBuilder destino.</param>
+        /// <param name="headers">Cabeceras a renderizar.</param>
+        /// <param name="colWidths">Anchos calculados por columna.</param>
+        /// <param name="style">Estilo ANSI a aplicar al texto; si es <c>null</c> se usa Cyan+Bold.</param>
         private static void AppendHeaderRow(StringBuilder sb, string[] headers, int[] colWidths, AnsiColor style = null)
         {
 
@@ -100,6 +138,12 @@ namespace TermFlow.Components.FullScreen
             sb.Append(ThemeColors.Dim).Append(ConsoleGlyphs.Vertical).Append(ThemeColors.Reset).Append('\n');
         }
 
+        /// <summary>
+        /// Appendiza todas las filas de datos con padding para alinear columnas.
+        /// </summary>
+        /// <param name="sb">StringBuilder destino.</param>
+        /// <param name="rows">Filas a renderizar.</param>
+        /// <param name="colWidths">Anchos calculados por columna.</param>
         private static void AppendDataRows(StringBuilder sb, List<string[]> rows, int[] colWidths)
         {
 

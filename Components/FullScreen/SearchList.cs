@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Text;
 using System.Collections.Generic;
@@ -7,6 +9,10 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
 {
+    /// <summary>
+    /// Componente full-screen de lista con buscador en vivo.
+    /// Filtra ítems a medida que el usuario escribe y permite selección única o múltiple.
+    /// </summary>
     public static class SearchList
     {
         // Reducido a 7 tras eliminar la línea en blanco sobrante debajo del cuadro de búsqueda
@@ -15,6 +21,10 @@ namespace TermFlow.Components.FullScreen
         /// <summary>
         /// Buscador de selección ÚNICA. Retorna el índice original del elemento o -1 si cancela.
         /// </summary>
+        /// <param name="title">Título a mostrar en la cabecera.</param>
+        /// <param name="items">Lista de ítems sobre los que filtrar.</param>
+        /// <param name="token">Token para cancelar la operación.</param>
+        /// <returns>Índice original del ítem elegido, o -1 si el usuario cancela.</returns>
         public static async Task<int> FilterOneAsync(string title, string[] items, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
@@ -82,6 +92,11 @@ namespace TermFlow.Components.FullScreen
         /// <summary>
         /// Buscador de selección MÚLTIPLE con Checkboxes. Retorna los índices originales marcados.
         /// </summary>
+        /// <param name="title">Título a mostrar en la cabecera.</param>
+        /// <param name="items">Lista de ítems sobre los que filtrar.</param>
+        /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
+        /// <param name="token">Token para cancelar la operación.</param>
+        /// <returns>Arreglo con los índices originales marcados al confirmar, o vacío si el usuario cancela.</returns>
         public static async Task<int[]> FilterMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
@@ -164,6 +179,18 @@ namespace TermFlow.Components.FullScreen
             finally { Engine.ExitFullScreen(); }
         }
 
+        /// <summary>
+        /// Dibuja el buscador completo (cabecera, query, ítems filtrados, indicadores de scroll y footer).
+        /// </summary>
+        /// <param name="buffer">StringBuilder reutilizable.</param>
+        /// <param name="title">Título a mostrar.</param>
+        /// <param name="queryString">Texto actual de la búsqueda.</param>
+        /// <param name="filtered">Lista de ítems filtrados con su índice original.</param>
+        /// <param name="cursor">Índice del cursor dentro de los filtrados.</param>
+        /// <param name="scroll">Índice del primer ítem visible.</param>
+        /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
+        /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox marcando estos índices originales.</param>
+        /// <param name="router">Enrutador que renderiza el footer contextual.</param>
         private static void RenderSearch(StringBuilder buffer, string title, string queryString, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
 

@@ -1,25 +1,49 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Text;
 using System.Threading;
 
 namespace TermFlow.Core;
 
+/// <summary>
+/// Clasifica el tipo de evento de entrada capturado por <see cref="InputReader"/>.
+/// </summary>
 internal enum InputEventType
 {
+    /// <summary>No hay evento disponible.</summary>
     None,
+    /// <summary>Tecla común del teclado (letras, flechas, etc.).</summary>
     Key,
+    /// <summary>Rueda del mouse hacia arriba.</summary>
     ScrollUp,
+    /// <summary>Rueda del mouse hacia abajo.</summary>
     ScrollDown
 }
 
+/// <summary>
+/// Estructura inmutable que representa un evento de entrada individual de la consola.
+/// </summary>
 internal struct ConsoleInputEvent
 {
+    /// <summary>Tipo de evento detectado.</summary>
     public InputEventType Type { get; set; }
+    /// <summary>Información de la tecla cuando <see cref="Type"/> es <see cref="InputEventType.Key"/>.</summary>
     public ConsoleKeyInfo KeyInfo { get; set; }
 }
 
+/// <summary>
+/// Lector de bajo nivel para la consola. Detecta teclas comunes y decodifica
+/// las secuencias ANSI SGR del mouse (scroll up/down) descartando clicks.
+/// </summary>
 internal static class InputReader
 {
+    /// <summary>
+    /// Lee un evento de entrada sin bloquear. Si no hay teclas disponibles devuelve un evento
+    /// de tipo <see cref="InputEventType.None"/>. Decodifica secuencias SGR del mouse y filtra
+    /// clicks fantasma para no propagar un Escape residual.
+    /// </summary>
+    /// <returns>Evento de consola decodificado.</returns>
     public static ConsoleInputEvent ReadInput()
     {
         if (!Console.KeyAvailable)

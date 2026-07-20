@@ -1,11 +1,20 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 
 namespace TermFlow.Core
 {
+    /// <summary>
+    /// Pequeña estructura de estado que centraliza la matemática del scroll y cursor
+    /// para componentes con listas scrollables (Menu, SearchList, TreeExplorer, etc.).
+    /// </summary>
     internal struct ScrollState
     {
+        /// <summary>Posición lógica del cursor dentro de la lista completa.</summary>
         public int Cursor { get; private set; }
+        /// <summary>Desplazamiento actual de la ventana visible (índice del primer item mostrado).</summary>
         public int Scroll { get; private set; }
+        /// <summary>Cantidad de filas visibles calculadas según el alto de la consola.</summary>
         public int VisibleRows { get; private set; }
 
         private int _lastHeight;
@@ -14,6 +23,10 @@ namespace TermFlow.Core
         /// <summary>
         /// Actualiza la matemática del scroll y detecta si la pantalla cambió de tamaño.
         /// </summary>
+        /// <param name="targetCursor">Nueva posición deseada del cursor.</param>
+        /// <param name="totalItems">Cantidad total de ítems de la lista.</param>
+        /// <param name="reservedRows">Filas reservadas (cabecera, footer, etc.) que no se usan para datos.</param>
+        /// <returns><c>true</c> si la consola fue redimensionada desde la última llamada.</returns>
         public bool Update(int targetCursor, int totalItems, int reservedRows)
         {
             bool sizeChanged = false;

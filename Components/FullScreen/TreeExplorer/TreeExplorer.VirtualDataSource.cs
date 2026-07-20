@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,12 +8,25 @@ namespace TermFlow.Components.FullScreen.TreeExplorer;
 
 public static partial class TreeExplorer
 {
+    /// <summary>
+    /// Implementación de <see cref="IExplorerDataSource"/> sobre un conjunto de rutas virtuales
+    /// (strings estilo Unix "a/b/c") cargadas en memoria. Construye una jerarquía in-memory
+    /// reutilizable. Es una clase privada anidada dentro del partial <see cref="TreeExplorer"/>.
+    /// </summary>
     private sealed class VirtualDataSource : IExplorerDataSource
     {
         private readonly Dictionary<string, List<ExplorerEntry>> _hierarchy = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _globalDirs = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Ruta virtual raíz (siempre comienza con "/").</summary>
         public string RootPath { get; }
+
+        /// <summary>
+        /// Construye la jerarquía virtual a partir de una colección de rutas.
+        /// Las rutas pueden usar "/" o "\" como separador; se normalizan a "/".
+        /// </summary>
+        /// <param name="paths">Rutas virtuales a cargar.</param>
+        /// <param name="virtualRoot">Nombre lógico a usar como raíz.</param>
         public VirtualDataSource(IEnumerable<string> paths, string virtualRoot)
         {
             string cleanRoot = virtualRoot.Replace('\\', '/').Trim('/');
@@ -58,7 +73,18 @@ public static partial class TreeExplorer
             }
         }
 
+        /// <summary>
+        /// Indica si el ID virtual corresponde a un directorio (carpeta en la jerarquía).
+        /// </summary>
+        /// <param name="id">Ruta virtual a evaluar.</param>
+        /// <returns><c>true</c> si es un directorio conocido.</returns>
         public bool IsDirectory(string id) => _globalDirs.Contains(id);
+
+        /// <summary>
+        /// Calcula el padre virtual de una ruta dividiendo por el último "/".
+        /// </summary>
+        /// <param name="id">Ruta virtual actual.</param>
+        /// <returns>Ruta del padre, la raíz, o <see cref="string.Empty"/> si no tiene padre.</returns>
         public string GetParent(string id)
         {
             // Lógica específica para rutas virtuales con '/'
@@ -68,12 +94,30 @@ public static partial class TreeExplorer
             string parent = id.Substring(0, idx);
             return string.IsNullOrEmpty(parent) ? "/" : parent;
         }
+
+        /// <summary>
+        /// Devuelve el ID virtual garantizando que termine con "/".
+        /// </summary>
+        /// <param name="id">Ruta virtual a normalizar.</param>
+        /// <returns>Ruta con "/" final.</returns>
         public string GetSubPathPrefix(string id) => id.EndsWith('/') ? id : id + "/";
 
+        /// <summary>
+        /// Devuelve las entradas hijas del ID virtual indicado, ordenadas alfabéticamente.
+        /// </summary>
+        /// <param name="id">Ruta virtual del nodo padre.</param>
+        /// <returns>Lista de entradas hijas o lista vacía si el nodo no existe.</returns>
         public List<ExplorerEntry> FetchAndSortEntries(string id) =>
             _hierarchy.TryGetValue(id, out var list) ? list : new List<ExplorerEntry>();
 
-        // Versión optimizada que usa la jerarquía en memoria
+        /// <summary>
+        /// Resolución optimizada de marcados que aprovecha la jerarquía en memoria
+        /// sin tocar disco ni re-construir estructuras.
+        /// </summary>
+        /// <param name="marked">Rutas marcadas.</param>
+        /// <param name="unmarkedExceptions">Excepciones de unmark.</param>
+        /// <param name="filter">Filtro de tipo de entrada.</param>
+        /// <returns>Array de rutas resueltas sin duplicados y ordenado.</returns>
         public string[] ResolveMarkedEntries(HashSet<string> marked, HashSet<string> unmarkedExceptions, ExplorerFilter filter)
         {
             var resolved = new List<string>();
@@ -88,6 +132,14 @@ public static partial class TreeExplorer
             return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
         }
 
+        /// <summary>
+        /// Recursión sobre la jerarquía virtual que recolecta archivos y subcarpetas marcadas.
+        /// </summary>
+        /// <param name="dir">Carpeta virtual a recorrer.</param>
+        /// <param name="filter">Filtro de tipo de entrada.</param>
+        /// <param name="marked">Rutas marcadas.</param>
+        /// <param name="unmarkedExceptions">Excepciones.</param>
+        /// <param name="resolved">Lista acumuladora.</param>
         private void TraverseVirtual(string dir, ExplorerFilter filter,
             HashSet<string> marked, HashSet<string> unmarkedExceptions, List<string> resolved)
         {

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Text;
 using System.Collections.Generic;
@@ -7,11 +9,22 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
 {
+    /// <summary>
+    /// Componente full-screen de menú de opciones. Soporta selección única y múltiple
+    /// con scroll, navegación por teclado y rueda del mouse, y footer contextual.
+    /// </summary>
     public static class Menu
     {
         // FIX: Cambiado a 6 para empujar las instrucciones hacia arriba y dejar la última línea libre
         private const int ReservedRows = 7;
 
+        /// <summary>
+        /// Muestra un menú de selección única a pantalla completa y espera la elección del usuario.
+        /// </summary>
+        /// <param name="title">Título a mostrar en la cabecera.</param>
+        /// <param name="items">Lista de opciones a elegir.</param>
+        /// <param name="token">Token para cancelar la selección.</param>
+        /// <returns>Índice del item elegido, o -1 si el usuario cancela (Esc/q).</returns>
         public static async Task<int> SelectOneAsync(string title, string[] items, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
@@ -76,6 +89,14 @@ namespace TermFlow.Components.FullScreen
             finally { Engine.ExitFullScreen(); }
         }
 
+        /// <summary>
+        /// Muestra un menú de selección múltiple con checkboxes a pantalla completa.
+        /// </summary>
+        /// <param name="title">Título a mostrar en la cabecera.</param>
+        /// <param name="items">Lista de opciones a elegir.</param>
+        /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
+        /// <param name="token">Token para cancelar la selección.</param>
+        /// <returns>Arreglo con los índices marcados al confirmar (ordenado), o vacío si el usuario cancela.</returns>
         public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
@@ -146,6 +167,17 @@ namespace TermFlow.Components.FullScreen
             finally { Engine.ExitFullScreen(); }
         }
 
+        /// <summary>
+        /// Dibuja el menú completo (cabecera, ítems visibles, indicadores de scroll y footer) en el buffer.
+        /// </summary>
+        /// <param name="buffer">StringBuilder reutilizable para ensamblar la salida.</param>
+        /// <param name="title">Título a mostrar.</param>
+        /// <param name="items">Lista completa de ítems.</param>
+        /// <param name="cursor">Índice del cursor actual.</param>
+        /// <param name="scroll">Índice del primer ítem visible.</param>
+        /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
+        /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox y marca los ítems incluidos.</param>
+        /// <param name="router">Enrutador de input encargado de renderizar el footer contextual.</param>
         private static void RenderMenu(StringBuilder buffer, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
 

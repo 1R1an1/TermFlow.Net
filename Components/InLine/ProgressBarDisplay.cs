@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Diagnostics;
 using System.Text;
@@ -8,17 +10,32 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.InLine
 {
+    /// <summary>
+    /// Interfaz que expone el valor mutable del progreso de una tarea para que el worker
+    /// lo actualice desde cualquier hilo de forma segura.
+    /// </summary>
     public interface IProgressTask
     {
+        /// <summary>Valor actual del progreso (de 0 a maxValue indicado en <see cref="ProgressBarDisplay.RunAsync"/>).</summary>
         long Value { get; set; }
     }
 
+    /// <summary>
+    /// Componente de barra de progreso en línea. Dibuja barra, porcentaje, velocidad y ETA
+    /// mientras se ejecuta la tarea de fondo. Compatible con modo inline y <see cref="LivePanel"/>.
+    /// </summary>
     public static class ProgressBarDisplay
     {
+        /// <summary>
+        /// Implementación interna de <see cref="IProgressTask"/> con acceso atómico al valor
+        /// mediante <see cref="Interlocked"/>.
+        /// </summary>
         private class ProgressTaskImpl : IProgressTask
         {
-            public long _value; // El campo real en memoria
+            /// <summary>El campo real en memoria que guarda el valor del progreso.</summary>
+            public long _value;
 
+            /// <summary>Lee o escribe el valor de progreso de forma atómica y thread-safe.</summary>
             public long Value
             {
                 get => Interlocked.Read(ref _value);
@@ -26,6 +43,17 @@ namespace TermFlow.Components.InLine
             }
         }
 
+        /// <summary>
+        /// Ejecuta una barra de progreso animada mientras corre la tarea indicada.
+        /// Calcula dinámicamente porcentaje, velocidad y ETA en intervalos de 250ms.
+        /// </summary>
+        /// <param name="description">Etiqueta descriptiva de la operación (ej. "Descargando").</param>
+        /// <param name="maxValue">Valor máximo que representa el 100%.</param>
+        /// <param name="workerTask">Tarea asíncrona que recibe un <see cref="IProgressTask"/> para reportar avance.</param>
+        /// <param name="finalText">Texto final opcional al terminar; si es <c>null</c> se arma uno por defecto.</param>
+        /// <param name="panelId">ID opcional de línea dinámica del <see cref="LivePanel"/> a reutilizar.</param>
+        /// <param name="showSpeed">Si <c>true</c> muestra la columna de velocidad (B/s, KB/s, etc.).</param>
+        /// <param name="token">Token de cancelación externa.</param>
         public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, string finalText = null, long? panelId = null, bool showSpeed = true, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -147,6 +175,11 @@ namespace TermFlow.Components.InLine
             }
         }
 
+        /// <summary>
+        /// Formatea una velocidad en bytes/segundo a la unidad decimal más legible (B/s, KB/s, MB/s, ...).
+        /// </summary>
+        /// <param name="bytesPerSecond">Velocidad cruda en bytes por segundo.</param>
+        /// <returns>Cadena formateada con la unidad apropiada.</returns>
         private static string FormatDecimalSpeed(double bytesPerSecond)
         {
             if (bytesPerSecond <= 0) return "0 B/s";
@@ -156,6 +189,13 @@ namespace TermFlow.Components.InLine
             return $"{bytesPerSecond / Math.Pow(1000, digitGroup):F1} {units[digitGroup]}";
         }
 
+        /// <summary>
+        /// Calcula el tiempo restante estimado (ETA) en formato HH:MM:SS.
+        /// </summary>
+        /// <param name="current">Valor actual del progreso.</param>
+        /// <param name="max">Valor máximo (100%).</param>
+        /// <param name="bytesPerSecond">Velocidad actual estimada.</param>
+        /// <returns>Cadena HH:MM:SS, "--:--:--" si no se puede calcular, o "99d+" si excede el límite.</returns>
         private static string FormatEta(long current, long max, double bytesPerSecond)
         {
             if (current >= max) return "00:00:00";
@@ -167,7 +207,7 @@ namespace TermFlow.Components.InLine
             if (secondsLeft > 86400 * 99) return "99d+"; // Límite de seguridad
 
             TimeSpan time = TimeSpan.FromSeconds(secondsLeft);
-            return $"{((int)time.TotalHours):D2}:{time.Minutes:D2}:{time.Seconds:D2}";
+            return $"{(int)time.TotalHours:D2}:{time.Minutes:D2}:{time.Seconds:D2}";
         }
     }
 }

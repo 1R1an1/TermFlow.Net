@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,22 +11,45 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
 {
+    /// <summary>
+    /// Panel de logs dinámico a pantalla completa. Mantiene un historial de entradas
+    /// (logs estáticos + líneas dinámicas actualizables) con scroll, caché de wrapping
+    /// y un loop de render reactivo accionado por semáforo.
+    /// </summary>
     public static class LivePanel
     {
+        /// <summary>
+        /// Entrada individual del historial. Puede ser estática (log) o dinámica (actualizable vía ID).
+        /// Mantiene una caché de las líneas físicas envueltas para evitar recálculos en cada frame.
+        /// </summary>
         private class LogEntry
         {
+            /// <summary>ID único incremental de la entrada.</summary>
             public long Id { get; }
+            /// <summary>Contenido principal de la línea.</summary>
             public string Content { get; set; }
+            /// <summary><c>true</c> si la entrada puede ser actualizada posteriormente (ej. spinner, barra de progreso).</summary>
             public bool IsDynamic { get; set; }
+            /// <summary>Prefijo decorativo opcional aplicado antes del contenido.</summary>
             public string Prefix { get; set; } = string.Empty;
+            /// <summary>Sufijo decorativo opcional aplicado después del contenido.</summary>
             public string Suffix { get; set; } = string.Empty;
+            /// <summary>Texto completo con prefijo + contenido + sufijo.</summary>
             public string FullText => $"{Prefix}{Content}{Suffix}";
 
             // --- SISTEMA DE CACHÉ PARA EVITAR RE-CÁLCULOS ---
+            /// <summary>Líneas físicas precalculadas para el ancho actual de consola.</summary>
             public List<string> CachedWrappedLines { get; private set; } = new();
+            /// <summary>Cantidad de líneas físicas que ocupa esta entrada.</summary>
             public int PhysicalLineCount => CachedWrappedLines.Count;
             private int _lastConsoleWidth = -1;
 
+            /// <summary>
+            /// Crea una nueva entrada.
+            /// </summary>
+            /// <param name="id">ID único asignado por el panel.</param>
+            /// <param name="content">Contenido inicial.</param>
+            /// <param name="isDynamic">Indica si es una línea actualizable.</param>
             public LogEntry(long id, string content, bool isDynamic)
             {
                 Id = id;
@@ -32,6 +57,11 @@ namespace TermFlow.Components.FullScreen
                 IsDynamic = isDynamic;
             }
 
+            /// <summary>
+            /// Recalcula la caché de líneas envueltas solo si cambió el ancho de consola o se fuerza.
+            /// </summary>
+            /// <param name="consoleWidth">Ancho actual de la consola en columnas.</param>
+            /// <param name="force">Si <c>true</c>, fuerza el recálculo aunque el ancho no haya cambiado.</param>
             public void RefreshCache(int consoleWidth, bool force = false)
             {
                 if (force || _lastConsoleWidth != consoleWidth || CachedWrappedLines.Count == 0)
@@ -57,8 +87,14 @@ namespace TermFlow.Components.FullScreen
         private static int? _maxLogs;
         private static readonly object _lock = new();
 
+        /// <summary><c>true</c> mientras el panel está corriendo en pantalla completa.</summary>
         public static bool IsActive => _isActive;
 
+        /// <summary>
+        /// Inicia el panel: entra en pantalla completa, limpia colas previas y lanza los loops
+        /// de render e input en hilos separados.
+        /// </summary>
+        /// <param name="maxLogs">Cantidad máxima opcional de entradas a retener en memoria (FIFO).</param>
         public static void Start(int? maxLogs = null)
         {
             if (_isActive) return;
@@ -77,6 +113,9 @@ namespace TermFlow.Components.FullScreen
             _ = Task.Run(() => InputLoop(_cts.Token));
         }
 
+        /// <summary>
+        /// Detiene el panel, cancela los loops, limpia el historial y restaura la consola.
+        /// </summary>
         public static void Stop()
         {
             if (!_isActive) return;
@@ -100,6 +139,10 @@ namespace TermFlow.Components.FullScreen
             }
         }
 
+        /// <summary>
+        /// Agrega un log estático (no actualizable) al historial.
+        /// </summary>
+        /// <param name="content">Texto del log ya formateado con ANSI.</param>
         internal static void AddLog(string content)
         {
             lock (_lock)
@@ -128,6 +171,11 @@ namespace TermFlow.Components.FullScreen
             RequestRender();
         }
 
+        /// <summary>
+        /// Agrega una línea dinámica actualizable al historial y devuelve su ID para futuras actualizaciones.
+        /// </summary>
+        /// <param name="initialContent">Contenido inicial de la línea.</param>
+        /// <returns>ID único de la línea para usar con <see cref="UpdateLine"/>.</returns>
         public static long AddDynamic(string initialContent)
         {
             long id;
@@ -158,13 +206,30 @@ namespace TermFlow.Components.FullScreen
             return id;
         }
 
+        /// <summary>
+        /// Actualiza el contenido de una línea dinámica identificada por su ID.
+        /// </summary>
+        /// <param name="id">ID retornado por <see cref="AddDynamic"/>.</param>
+        /// <param name="newContent">Nuevo texto a mostrar.</param>
         public static void UpdateLine(long id, string newContent) => ApplyUpdate(id, l => l.Content = newContent);
 
+        /// <summary>
+        /// Actualiza el prefijo y/o sufijo decorativo de una línea sin alterar su contenido.
+        /// </summary>
+        /// <param name="id">ID de la línea a modificar.</param>
+        /// <param name="prefix">Nuevo prefijo (se deja sin cambios si es <c>null</c>).</param>
+        /// <param name="suffix">Nuevo sufijo (se deja sin cambios si es <c>null</c>).</param>
         public static void UpdateDecorations(long id, string prefix = null, string suffix = null) => ApplyUpdate(id, entry =>
         {
             if (prefix != null) entry.Prefix = prefix;
             if (suffix != null) entry.Suffix = suffix;
         });
+
+        /// <summary>
+        /// Obtiene el prefijo y sufijo actuales de una línea.
+        /// </summary>
+        /// <param name="id">ID de la línea consultada.</param>
+        /// <returns>Tupla (prefix, suffix); vacíos si el ID no existe.</returns>
         public static (string prefix, string suffix) GetDecorations(long id)
         {
             lock (_lock)
@@ -176,6 +241,12 @@ namespace TermFlow.Components.FullScreen
         }
 
 
+        /// <summary>
+        /// Aplica una mutación arbitraria a una entrada del historial y recalcula su caché
+        /// ajustando el offset de scroll si la cantidad de líneas físicas cambió.
+        /// </summary>
+        /// <param name="id">ID de la entrada a modificar.</param>
+        /// <param name="updateAction">Acción que muta la entrada.</param>
         private static void ApplyUpdate(long id, Action<LogEntry> updateAction)
         {
             lock (_lock)
@@ -207,12 +278,21 @@ namespace TermFlow.Components.FullScreen
             RequestRender();
         }
 
+        /// <summary>
+        /// Solicita un frame de render al loop. Si ya hay uno pendiente, no hace nada
+        /// (evita acumular señales en el semáforo).
+        /// </summary>
         private static void RequestRender()
         {
             if (Interlocked.Exchange(ref _renderPending, 1) == 0)
                 _renderSignal.Release();
         }
 
+        /// <summary>
+        /// Loop principal de renderizado. Espera señales del semáforo y redibuja todo el historial
+        /// visible ajustando el scroll. Detecta redimensionamiento de consola.
+        /// </summary>
+        /// <param name="token">Token de cancelación.</param>
         private static async Task RenderLoop(CancellationToken token)
         {
             try
@@ -289,6 +369,11 @@ namespace TermFlow.Components.FullScreen
             catch (OperationCanceledException) { }
         }
 
+        /// <summary>
+        /// Loop de lectura de input. Convierte rueda/flechas/PageUp/PageDown en deltas de scroll
+        /// y encola teclas comunes para que las consuma <see cref="WaitForKeyAsync"/>.
+        /// </summary>
+        /// <param name="token">Token de cancelación.</param>
         private static async Task InputLoop(CancellationToken token)
         {
             try
@@ -336,6 +421,12 @@ namespace TermFlow.Components.FullScreen
             catch (OperationCanceledException) { }
         }
 
+        /// <summary>
+        /// Espera asíncrona a que el usuario presione una tecla, consumiéndola de la cola interna.
+        /// Limpia la cola y el semáforo al inicio para devolver solo la próxima tecla nueva.
+        /// </summary>
+        /// <param name="token">Token de cancelación.</param>
+        /// <returns><see cref="ConsoleKeyInfo"/> de la tecla presionada, o <c>default</c> si se cancela.</returns>
         internal static async Task<ConsoleKeyInfo> WaitForKeyAsync(CancellationToken token = default)
         {
             if (!_isActive) return default;
@@ -352,6 +443,11 @@ namespace TermFlow.Components.FullScreen
             catch (OperationCanceledException) { return default; }
         }
 
+        /// <summary>
+        /// Versión sincrónica de <see cref="WaitForKeyAsync"/>. Bloquea el hilo actual.
+        /// </summary>
+        /// <param name="token">Token de cancelación.</param>
+        /// <returns><see cref="ConsoleKeyInfo"/> leída o <c>default</c> si se cancela.</returns>
         internal static ConsoleKeyInfo WaitForKey(CancellationToken token = default)
         {
             if (!_isActive) return default;

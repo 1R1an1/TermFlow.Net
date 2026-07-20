@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MPL-2.0
+ * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Text;
 using System.Threading;
@@ -7,12 +9,19 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.InLine
 {
+    /// <summary>
+    /// Utilidades para capturar entrada de texto del usuario (string, sí/no, presionar para continuar).
+    /// Compatible con modo inline y con el panel dinámico <see cref="LivePanel"/>.
+    /// </summary>
     public static class TextInput
     {
         /// <summary>
         /// Solicita una cadena de texto al usuario de manera asíncrona, interceptando el teclado
         /// y respondiendo inmediatamente al CancellationToken.
         /// </summary>
+        /// <param name="prompt">Texto a mostrar antes del cursor de entrada.</param>
+        /// <param name="token">Token para cancelar la lectura.</param>
+        /// <returns>Texto ingresado al presionar Enter, o <c>null</c> si fue cancelado.</returns>
         public static async Task<string> ReadStringAsync(string prompt, CancellationToken token = default)
         {
             long? dynamicId = null;
@@ -61,6 +70,11 @@ namespace TermFlow.Components.InLine
             return null;
         }
 
+        /// <summary>
+        /// Realiza una pregunta de sí/no al usuario. Acepta Y, N o Escape.
+        /// </summary>
+        /// <param name="prompt">Pregunta a mostrar (se le agregará automáticamente " [y/n] ").</param>
+        /// <returns><c>true</c> si presiona Y; <c>false</c> si presiona N o Escape.</returns>
         public static async Task<bool> AskAsync(string prompt)
         {
             string fullPrompt = $"{prompt} {AnsiColor.Cyan}[y/n]{ThemeColors.Reset} ";
@@ -93,6 +107,10 @@ namespace TermFlow.Components.InLine
             }
         }
 
+        /// <summary>
+        /// Bloquea la ejecución hasta que el usuario presiona Enter.
+        /// </summary>
+        /// <param name="message">Mensaje a mostrar antes de la pausa.</param>
         public static void PressToContinue(string message = "[Presiona enter para regresar]")
         {
             TextViewer.WritePlain($"{ThemeColors.Dim}  {message}{ThemeColors.Reset}");
