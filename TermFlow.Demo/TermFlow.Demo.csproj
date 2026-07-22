@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
-    <OutputType>Library</OutputType>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
   </PropertyGroup>
 
+
   <ItemGroup>
-    <Compile Remove="TermFlow.Demo\**" />
+    <ProjectReference Include="..\TermFlow.Net.csproj" />
   </ItemGroup>
 </Project>
