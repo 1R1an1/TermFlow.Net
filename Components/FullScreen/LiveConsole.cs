@@ -24,8 +24,8 @@ namespace TermFlow.Components.FullScreen
         private bool _hasNewLogsBelow = false;
         private int _scrollOffset = 0; // 0 = Enganchado al fondo (Sticky)
 
-        // El semáforo maestro que despierta a la pantalla solo cuando es necesario
         private readonly SemaphoreSlim _renderSignal = new(1, 1);
+        private int _renderPending;
 
         /// <summary>
         /// Crea una nueva instancia de <see cref="LiveConsole"/>.
@@ -91,6 +91,7 @@ namespace TermFlow.Components.FullScreen
                 while (!internalCts.Token.IsCancellationRequested)
                 {
                     await _renderSignal.WaitAsync(internalCts.Token);
+                    Interlocked.Exchange(ref _renderPending, 0);
 
                     // Pequeña validación de Resize por si el usuario estira la ventana
                     if (Console.WindowWidth != lastWidth || Console.WindowHeight != lastHeight)
@@ -113,15 +114,13 @@ namespace TermFlow.Components.FullScreen
         }
 
         /// <summary>
-        /// Libera el semáforo de render solo si está en 0, evitando acumulaciones innecesarias.
+        /// Solicita un frame de render al loop. Si ya hay uno pendiente, no hace nada
+        /// (evita acumular señales en el semáforo).
         /// </summary>
         private void RequestRender()
         {
-            // Libera el semáforo solo si está en 0 para evitar acumulaciones
-            if (_renderSignal.CurrentCount == 0)
-            {
+            if (Interlocked.Exchange(ref _renderPending, 1) == 0)
                 _renderSignal.Release();
-            }
         }
 
         /// <summary>
