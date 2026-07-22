@@ -12,7 +12,7 @@ namespace TermFlow.Demo;
 internal class Program
 {
     private static readonly string[] MainMenuItems =
-    {
+    [
         "TextViewer — Info / Success / Warn / Error",
         "TextInput — ReadString + Ask (y/n)",
         "SpinnerDisplay — tarea de fondo",
@@ -28,7 +28,7 @@ internal class Program
         "LivePanel — panel de logs dinámico",
         "LiveConsole — Consola en estilo chat",
         "Salir"
-    };
+    ];
 
     private static async Task Main(string[] args)
     {
@@ -37,7 +37,7 @@ internal class Program
         ThemeColors.Selector = ThemeColors.Bright;
         while (true)
         {
-            int choice = await Menu.SelectOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems);
+            int choice = await SearchList.FilterOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems);
             if (choice == -1 || choice == MainMenuItems.Length - 1) break;
 
             try
