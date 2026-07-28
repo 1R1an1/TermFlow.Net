@@ -24,7 +24,7 @@ namespace TermFlow.Components.FullScreen
         private bool _hasNewLogsBelow = false;
         private int _scrollOffset = 0; // 0 = Enganchado al fondo (Sticky)
 
-        private readonly SemaphoreSlim _renderSignal = new(1, 1);
+        private readonly SemaphoreSlim _renderSignal = new(0, 1);
         private int _renderPending;
 
         /// <summary>
@@ -81,6 +81,7 @@ namespace TermFlow.Components.FullScreen
 
             // Hilo 1: Lector reactivo de teclado y mouse
             Task inputTask = Task.Run(() => ProcessInput(internalCts, onInputSubmitted), internalCts.Token);
+            RequestRender();
 
             try
             {
