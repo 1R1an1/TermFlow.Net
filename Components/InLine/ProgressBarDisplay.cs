@@ -21,7 +21,7 @@ namespace TermFlow.Components.InLine
     }
 
     /// <summary>
-    /// Componente de barra de progreso en línea. Dibuja barra, porcentaje, velocidad y ETA
+    /// Componente de barra de progreso en línea. Dibuja barra, porcentaje, velocidad, ETA y actual/máximo
     /// mientras se ejecuta la tarea de fondo. Compatible con modo inline y <see cref="LivePanel"/>.
     /// </summary>
     public static class ProgressBarDisplay
@@ -53,8 +53,12 @@ namespace TermFlow.Components.InLine
         /// <param name="finalText">Texto final opcional al terminar; si es <c>null</c> se arma uno por defecto.</param>
         /// <param name="panelId">ID opcional de línea dinámica del <see cref="LivePanel"/> a reutilizar.</param>
         /// <param name="showSpeed">Si <c>true</c> muestra la columna de velocidad (B/s, KB/s, etc.).</param>
+        /// <param name="showEta">Si <c>true</c> muestra el tiempo restante estimado.</param>
+        /// <param name="showCurrentMax">Si <c>true</c> muestra la columna actual/máximo.</param>
+        /// <param name="formatCurrentMaxAsSize">Si <c>true</c> formatea actual/máximo como tamaño (KB, MB); si <c>false</c> como entero.</param>
+        /// <param name="maxBarWidth">Tamaño máximo en caracteres que puede ocupar la barra de progreso.</param>
         /// <param name="token">Token de cancelación externa.</param>
-        public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, string finalText = null, long? panelId = null, bool showSpeed = true, CancellationToken token = default)
+        public static async Task RunAsync(string description, long maxValue, Func<IProgressTask, Task> workerTask, string finalText = null, long? panelId = null, bool showSpeed = true, bool showEta = true, bool showCurrentMax = false, bool formatCurrentMaxAsSize = false, int? maxBarWidth = null, CancellationToken token = default)
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             var taskState = new ProgressTaskImpl();
@@ -63,7 +67,7 @@ namespace TermFlow.Components.InLine
             var stopwatch = Stopwatch.StartNew();
 
             double lastMetricsUpdate = 0;
-            double metricsInterval = 0.25; // 300ms
+            double metricsInterval = 0.25; // 250ms
 
             double lastValue = 0;
             double lastTime = 0;
@@ -108,15 +112,20 @@ namespace TermFlow.Components.InLine
                         // 2. Columna Porcentaje
                         string colPercent = $" {(int)(percentage * 100)}% ";
 
-                        // 3. Columna Velocidad (Condicional)
+                        // 3. Columna Velocidad (opcional)
                         string colSpeed = showSpeed ? $" {FormatDecimalSpeed(displaySpeed)} " : string.Empty;
 
-                        // 4. Columna Tiempo Restante (ETA)
-                        string colEta = $" [{FormatEta(currentVal, maxValue, displaySpeed)}] ";
+                        // 4. Columna Tiempo Restante (ETA) (opcional)
+                        string colEta = showEta ? $" [{FormatEta(currentVal, maxValue, displaySpeed)}] " : string.Empty;
+
+                        // 5. Columna Actual/Máximo (opcional)
+                        string colCurrentMax = showCurrentMax ? $" {FormatCurrentMax(currentVal, maxValue, formatCurrentMaxAsSize)} " : string.Empty;
 
                         // Calcular espacio disponible para la barra de progreso de forma dinámica
-                        int metaWidth = colDesc.GetVisualLength() + colPercent.GetVisualLength() + colSpeed.GetVisualLength() + colEta.GetVisualLength() + 2;
-                        int barWidth = Math.Max(10, Console.WindowWidth - metaWidth);
+                        int metaWidth = colDesc.GetVisualLength() + colPercent.GetVisualLength() + colSpeed.GetVisualLength() + colEta.GetVisualLength() + colCurrentMax.GetVisualLength() + 2; // Corchetes de la barra
+
+                        int dynamicWidth = Math.Max(10, Console.WindowWidth - metaWidth);
+                        int barWidth = maxBarWidth.HasValue ? Math.Min(dynamicWidth, maxBarWidth.Value) : dynamicWidth;
 
                         int filledBlocks = (int)Math.Round(percentage * barWidth);
                         int emptyBlocks = barWidth - filledBlocks;
@@ -125,7 +134,7 @@ namespace TermFlow.Components.InLine
                         string barEmpty = new string('░', Math.Max(0, emptyBlocks));
                         string colBar = $"{ThemeColors.Success}[{barFilled}{ThemeColors.Dim}{barEmpty}{ThemeColors.Success}]{ThemeColors.Reset}";
 
-                        string line = $"{colDesc}{colBar}{colPercent}{colSpeed}{colEta}";
+                        string line = $"{colDesc}{colBar}{colPercent}{colCurrentMax}{colSpeed}{colEta}";
 
                         if (line != oldLine)
                         {
@@ -173,6 +182,30 @@ namespace TermFlow.Components.InLine
                 else
                     Console.Write($"\r{finalLine}\x1b[K\n");
             }
+        }
+
+        /// <summary>
+        /// Formatea un par actual/máximo. Si es tamaño, lo convierte a KB/MB, si no, lo deja como entero.
+        /// </summary>
+        private static string FormatCurrentMax(long current, long max, bool asSize)
+        {
+            if (asSize)
+                return $"{FormatSize(current)} / {FormatSize(max)}";
+
+            // Relleno a izquierda para que el tamaño visual no salte cuando pasa de 9 a 10
+            return $"{current}/{max}";
+        }
+
+        /// <summary>
+        /// Formatea un tamaño en bytes a la unidad decimal más legible (B, KB, MB, ...).
+        /// </summary>
+        private static string FormatSize(long bytes)
+        {
+            if (bytes <= 0) return "0 B";
+            string[] units = { "B", "KB", "MB", "GB", "TB" };
+            int digitGroup = (int)(Math.Log10(bytes) / 3);
+            if (digitGroup >= units.Length) digitGroup = units.Length - 1;
+            return $"{bytes / Math.Pow(1000, digitGroup):F1} {units[digitGroup]}";
         }
 
         /// <summary>
