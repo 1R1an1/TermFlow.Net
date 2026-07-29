@@ -133,6 +133,7 @@ namespace TermFlow.Components.InLine
 
             try
             {
+                if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
                 while (!finished && !token.IsCancellationRequested)
                 {
                     currentKey = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
@@ -226,6 +227,7 @@ namespace TermFlow.Components.InLine
 
             try
             {
+                if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
                 while (!finished)
                 {
                     currentKey = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
@@ -257,6 +259,7 @@ namespace TermFlow.Components.InLine
         public static void PressToContinue(string message = "[Presiona enter para regresar]")
         {
             TextViewer.WritePlain($"{ThemeColors.Dim}  {message}{ThemeColors.Reset}");
+            if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
             while ((LivePanel.IsActive ? LivePanel.WaitForKey().Key : Console.ReadKey(true).Key) != ConsoleKey.Enter) { }
         }
     }

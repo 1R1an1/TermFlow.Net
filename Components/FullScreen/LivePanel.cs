@@ -85,7 +85,7 @@ namespace TermFlow.Components.FullScreen
         private static CancellationTokenSource _cts;
         private static bool _isActive = false;
         private static int? _maxLogs;
-        private static readonly object _lock = new();
+        private static readonly Lock _lock = new();
 
         /// <summary><c>true</c> mientras el panel está corriendo en pantalla completa.</summary>
         public static bool IsActive => _isActive;
@@ -466,9 +466,6 @@ namespace TermFlow.Components.FullScreen
         {
             if (!_isActive) return default;
 
-            while (_keyQueue.TryDequeue(out _)) { }
-            while (_keySignal.Wait(0)) { }
-
             try
             {
                 await _keySignal.WaitAsync(token).ConfigureAwait(false);
@@ -487,9 +484,6 @@ namespace TermFlow.Components.FullScreen
         {
             if (!_isActive) return default;
 
-            while (_keyQueue.TryDequeue(out _)) { }
-            while (_keySignal.Wait(0)) { }
-
             try
             {
                 _keySignal.Wait(token);
@@ -497,6 +491,25 @@ namespace TermFlow.Components.FullScreen
                 return key;
             }
             catch (OperationCanceledException) { return default; }
+        }
+
+        /// <summary>
+        /// Limpia la cola de teclas pendientes y reinicia el semáforo de señales.
+        /// </summary>
+        /// <remarks>
+        /// Útil para llamar justo antes de iniciar una nueva captura de input (ej. en un prompt de texto)
+        /// para evitar que teclas presionadas anteriormente (input fantasma) sean procesadas en el nuevo contexto.
+        /// Si el panel no está activo, la función no hace nada.
+        /// </remarks>
+        internal static void ClearKeysQueue()
+        {
+            if (!_isActive) return;
+
+            lock (_lock)
+            {
+                while (_keyQueue.TryDequeue(out _)) { }
+                while (_keySignal.Wait(0)) { }
+            }
         }
     }
 }
