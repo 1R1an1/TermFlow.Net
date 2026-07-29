@@ -90,6 +90,10 @@ namespace TermFlow.Components.FullScreen
         /// <summary><c>true</c> mientras el panel está corriendo en pantalla completa.</summary>
         public static bool IsActive => _isActive;
 
+        /// <summary>Si está activo, el panel forzará el cursor real de la consola en estas coordenadas tras dibujar.</summary>
+        internal static long? FocusEntryId { get; set; } = null;
+        internal static int FocusVisualCol { get; set; } = 0;
+
         /// <summary>
         /// Inicia el panel: entra en pantalla completa, limpia colas previas y lanza los loops
         /// de render e input en hilos separados.
@@ -322,6 +326,7 @@ namespace TermFlow.Components.FullScreen
                     List<List<string>> wrappedLines = new List<List<string>>();
                     int totalLines = 0;
                     int currentScroll;
+                    int focusLineStart = -1; // Guarda la fila física inicial del input
 
                     lock (_lock)
                     {
@@ -330,6 +335,11 @@ namespace TermFlow.Components.FullScreen
                             if (widthChanged) entry.RefreshCache(width);
 
                             wrappedLines.Add(entry.CachedWrappedLines);
+
+                            // Capturar en qué fila física empieza la entrada con foco
+                            if (FocusEntryId.HasValue && entry.Id == FocusEntryId.Value)
+                                focusLineStart = totalLines;
+
                             totalLines += entry.PhysicalLineCount;
                         }
 
@@ -363,6 +373,31 @@ namespace TermFlow.Components.FullScreen
                     }
 
                     sb.Append("\x1b[J");
+
+                    // --- Logica de cursor real de la consola ---
+                    if (focusLineStart != -1 && focusLineStart >= visibleStart && focusLineStart < visibleEnd)
+                    {
+                        int row = focusLineStart - visibleStart + 1; // ANSI es base 1
+                        int col = FocusVisualCol + 1; // ANSI es base 1
+                        width = Console.WindowWidth;
+
+                        // Ajustar si el cursor cayó en una línea envuelta (wrapped)
+                        if (col > width)
+                        {
+                            row += (col - 1) / width;
+                            col = ((col - 1) % width) + 1;
+                        }
+
+                        if (row <= height) // Asegurar que no se salga de la pantalla visible
+                        {
+                            sb.Append($"\x1b[{row};{col}H");
+                            sb.Append("\x1b[?25h"); // Mostrar cursor real
+                        }
+                    }
+                    else
+                        sb.Append("\x1b[?25l"); // Ocultar cursor real
+
+                    // ---------------------------------------------------
                     Console.Write(sb.ToString());
                 }
             }
