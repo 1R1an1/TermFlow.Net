@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using TermFlow.Components.InLine;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
@@ -21,10 +20,9 @@ namespace TermFlow.Components.FullScreen
         /// <param name="headers">Array con los títulos de cada columna.</param>
         /// <param name="rows">Lista de filas, cada una con los valores por columna (pueden faltar columnas).</param>
         /// <param name="headerStyle">Estilo ANSI opcional para la cabecera; si es <c>null</c> usa Cyan+Bold.</param>
-        public static void Show(string[] headers, List<string[]> rows, AnsiColor headerStyle = null)
+        /// <param name="panelId">ID opcional de línea dinámica del <see cref="LivePanel"/> a reutilizar.</param>
+        public static void Show(string[] headers, List<string[]> rows, AnsiColor headerStyle = null, long? panelId = null)
         {
-
-
             // 1. Cálculos de geometría aislados
             int[] colWidths = CalculateColumnWidths(headers, rows);
             int totalInnerWidth = CalculateTotalWidth(colWidths);
@@ -38,11 +36,14 @@ namespace TermFlow.Components.FullScreen
             AppendBorder(sb, ConsoleGlyphs.Vertical, ConsoleGlyphs.Vertical, totalInnerWidth);
             AppendDataRows(sb, rows, colWidths);
             AppendBorder(sb, ConsoleGlyphs.BottomLeft, ConsoleGlyphs.BottomRight, totalInnerWidth);
-
+            sb.Remove(sb.Length - 1, 1);
 
             // 3. Volcado único a pantalla
             if (LivePanel.IsActive)
-                LivePanel.AddLog(sb.ToString());
+                if (panelId == null)
+                    LivePanel.AddLog(sb.ToString());
+                else
+                    LivePanel.UpdateLine(panelId.Value, sb.ToString());
             else
                 Console.Write(sb.Append('\n'));
 
