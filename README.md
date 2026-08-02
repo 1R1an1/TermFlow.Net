@@ -17,19 +17,31 @@ TermFlow.Net te permite construir desde simples barras de progreso hasta aplicac
 
 ## Tabla de contenidos
 
-1. [Requisitos](#requisitos)
-2. [Instalación](#instalación)
-3. [Inicio rápido](#inicio-rápido)
-4. [Demo](#demo)
-5. [Arquitectura](#arquitectura)
-6. [Componentes InLine](#componentes-inline)
-7. [Componentes FullScreen](#componentes-fullscreen)
-8. [Motor Core](#motor-core)
-9. [Sistema de temas y glifos](#sistema-de-temas-y-glifos)
-10. [Atajos de teclado](#atajos-de-teclado)
-11. [Estructura del proyecto](#estructura-del-proyecto)
-12. [Compatibilidad](#compatibilidad)
-13. [Licencia](#licencia)
+- [TermFlow.Net](#termflownet)
+  - [Tabla de contenidos](#tabla-de-contenidos)
+  - [Requisitos](#requisitos)
+  - [Instalación](#instalación)
+  - [Inicio rápido](#inicio-rápido)
+  - [Demo](#demo)
+  - [Arquitectura](#arquitectura)
+  - [Componentes InLine](#componentes-inline)
+    - [`TextViewer`](#textviewer)
+    - [`TextInput`](#textinput)
+    - [`TableView`](#tableview)
+    - [`SpinnerDisplay`](#spinnerdisplay)
+    - [`ProgressBarDisplay`](#progressbardisplay)
+  - [Componentes FullScreen](#componentes-fullscreen)
+    - [`Menu`](#menu)
+    - [`SearchList`](#searchlist)
+    - [`TreeExplorer`](#treeexplorer)
+    - [`LivePanel`](#livepanel)
+    - [`LiveConsole`](#liveconsole)
+  - [Motor Core](#motor-core)
+  - [Sistema de temas y glifos](#sistema-de-temas-y-glifos)
+  - [Atajos de teclado](#atajos-de-teclado)
+  - [Estructura del proyecto](#estructura-del-proyecto)
+  - [Compatibilidad](#compatibilidad)
+  - [Licencia](#licencia)
 
 ---
 
@@ -37,11 +49,11 @@ TermFlow.Net te permite construir desde simples barras de progreso hasta aplicac
 
 
 
-| Requisito | Detalle |
-|-----------|---------|
-| .NET SDK | **10.0+** |
-| Sistema operativo | Windows 10/11 o Linux |
-| Terminal | Cualquiera con soporte ANSI/VT100 |
+| Requisito            | Detalle                                              |
+| -------------------- | ---------------------------------------------------- |
+| .NET SDK             | **10.0+**                                            |
+| Sistema operativo    | Windows 10/11 o Linux                                |
+| Terminal             | Cualquiera con soporte ANSI/VT100                    |
 | Fuente (recomendada) | Una fuente monoespaciada con buena cobertura Unicode |
 
 > ℹ️ En Windows, `Engine.Setup()` activa automáticamente `ENABLE_VIRTUAL_TERMINAL_PROCESSING` vía P/Invoke para garantizar el render ANSI, incluso en terminales que no lo habilitan por defecto.
@@ -166,6 +178,20 @@ bool   confirmar = await TextInput.AskAsync("¿Continuar?");
 TextInput.PressToContinue();
 ```
 
+### `TableView`
+Tablas auto-ajustables con bordes Unicode. El ancho de cada columna se calcula a partir del contenido.
+
+```csharp
+TableView.Show(
+    headers: new[] { "ID", "Servidor", "IP", "Estado" },
+    rows: new List<string[]>
+    {
+        new[] { "001", "Hub",    "127.0.0.1:8080",     "ONLINE"  },
+        new[] { "002", "Backup", "192.168.1.50:9000",  "OFFLINE" }
+    }
+);
+```
+
 ### `SpinnerDisplay`
 Spinner animado Braille mientras corre una tarea de fondo.
 
@@ -221,20 +247,6 @@ Buscador en vivo con selección única o múltiple.
 ```csharp
 int   idx  = await SearchList.FilterOneAsync("Buscar cliente", clientes);
 int[] idxs = await SearchList.FilterMultiAsync("Etiquetas", tags);
-```
-
-### `TableView`
-Tablas auto-ajustables con bordes Unicode. El ancho de cada columna se calcula a partir del contenido.
-
-```csharp
-TableView.Show(
-    headers: new[] { "ID", "Servidor", "IP", "Estado" },
-    rows: new List<string[]>
-    {
-        new[] { "001", "Hub",    "127.0.0.1:8080",     "ONLINE"  },
-        new[] { "002", "Backup", "192.168.1.50:9000",  "OFFLINE" }
-    }
-);
 ```
 
 ### `TreeExplorer`
@@ -294,16 +306,16 @@ await console.RunAsync(">>> ", async (input) =>
 
 ## Motor Core
 
-| Clase | Responsabilidad |
-|-------|-----------------|
-| `Engine` | Inicializa UTF-8, ANSI nativo en Windows, y gestiona la entrada/salida del alternate buffer. |
-| `InputReader` | Lector de bajo nivel: decodifica teclas comunes y secuencias ANSI SGR del mouse (scroll up/down), filtrando clicks fantasma. |
-| `InputRouter` | Enrutador fluent de teclas a acciones, con agrupación automática del footer contextual. |
-| `ScrollState` | Matemática de cursor + ventana de scroll, con detección automática de resize. |
-| `AnsiColor` | Wrapper tipado para secuencias ANSI. Soporta composición con `+` y conversión implícita a `string`. |
-| `AnsiStringHelper` | Extensiones para envolver, truncar y medir strings respetando códigos ANSI. |
-| `ThemeColors` | Paleta semántica central (`Success`, `Warning`, `Error`, `Info`, etc.). Modificable en runtime. |
-| `ConsoleGlyphs` | Catálogo de glifos Unicode (`┌ ┐ └ ┘ ─ │ ✔ ⚠ ● ▶`). Modificable en runtime. |
+| Clase              | Responsabilidad                                                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `Engine`           | Inicializa UTF-8, ANSI nativo en Windows, y gestiona la entrada/salida del alternate buffer.                                 |
+| `InputReader`      | Lector de bajo nivel: decodifica teclas comunes y secuencias ANSI SGR del mouse (scroll up/down), filtrando clicks fantasma. |
+| `InputRouter`      | Enrutador fluent de teclas a acciones, con agrupación automática del footer contextual.                                      |
+| `ScrollState`      | Matemática de cursor + ventana de scroll, con detección automática de resize.                                                |
+| `AnsiColor`        | Wrapper tipado para secuencias ANSI. Soporta composición con `+` y conversión implícita a `string`.                          |
+| `AnsiStringHelper` | Extensiones para envolver, truncar y medir strings respetando códigos ANSI.                                                  |
+| `ThemeColors`      | Paleta semántica central (`Success`, `Warning`, `Error`, `Info`, etc.). Modificable en runtime.                              |
+| `ConsoleGlyphs`    | Catálogo de glifos Unicode (`┌ ┐ └ ┘ ─ │ ✔ ⚠ ● ▶`). Modificable en runtime.                                                  |
 
 ---
 
@@ -341,23 +353,23 @@ Console.Write($"{miEstilo}Texto{ThemeColors.Reset}");
 
 Los componentes FullScreen comparten un esquema común de atajos (configurables vía `InputRouter`):
 
-| Tecla | Acción | Componentes |
-|-------|--------|-------------|
-| `↑` / `↓` | Navegar | Todos |
-| `j` / `k` | Navegar (estilo Vim) | Menu, TreeExplorer |
-| `g` / `G` | Ir al inicio / final | Menu |
-| `Space` | Marcar / desmarcar | Menu (multi), SearchList (multi), TreeExplorer (multi) |
-| `Enter` | Confirmar / entrar a carpeta | Todos |
-| `Esc` / `q` | Cancelar / salir | Todos |
-| `h` / `l` | Volver / entrar (estilo Vim) | TreeExplorer |
-| `←` / `→` | Volver / entrar | TreeExplorer |
-| `c` | Confirmar selección múltiple | TreeExplorer |
-| `Backspace` | Borrar carácter | SearchList |
-| `Rueda del mouse` | Scroll vertical | Todos |
-| `PageUp` / `PageDown` | Scroll al inicio / final | LivePanel |
-| `Shift+Enter` | Salto de línea en el input | LiveConsole |
-| `End` | Ir al presente (scroll 0) | LiveConsole |
-| `/exit` | Comando para salir | LiveConsole |
+| Tecla                 | Acción                       | Componentes                                            |
+| --------------------- | ---------------------------- | ------------------------------------------------------ |
+| `↑` / `↓`             | Navegar                      | Todos                                                  |
+| `j` / `k`             | Navegar (estilo Vim)         | Menu, TreeExplorer                                     |
+| `g` / `G`             | Ir al inicio / final         | Menu                                                   |
+| `Space`               | Marcar / desmarcar           | Menu (multi), SearchList (multi), TreeExplorer (multi) |
+| `Enter`               | Confirmar / entrar a carpeta | Todos                                                  |
+| `Esc` / `q`           | Cancelar / salir             | Todos                                                  |
+| `h` / `l`             | Volver / entrar (estilo Vim) | TreeExplorer                                           |
+| `←` / `→`             | Volver / entrar              | TreeExplorer                                           |
+| `c`                   | Confirmar selección múltiple | TreeExplorer                                           |
+| `Backspace`           | Borrar carácter              | SearchList                                             |
+| `Rueda del mouse`     | Scroll vertical              | Todos                                                  |
+| `PageUp` / `PageDown` | Scroll al inicio / final     | LivePanel                                              |
+| `Shift+Enter`         | Salto de línea en el input   | LiveConsole                                            |
+| `End`                 | Ir al presente (scroll 0)    | LiveConsole                                            |
+| `/exit`               | Comando para salir           | LiveConsole                                            |
 
 ---
 
@@ -380,12 +392,12 @@ TermFlow.Net/
 │   ├── InLine/
 │   │   ├── TextViewer.cs               # Info/Success/Warn/Error/Figlet
 │   │   ├── TextInput.cs                # ReadString/Ask/PressToContinue
+│   │   ├── TableView.cs                # Tabla con bordes
 │   │   ├── SpinnerDisplay.cs           # Spinner Braille async
 │   │   └── ProgressBarDisplay.cs       # Barra con ETA + velocidad
 │   └── FullScreen/
 │       ├── Menu.cs                     # SelectOne / SelectMulti
 │       ├── SearchList.cs               # FilterOne / FilterMulti
-│       ├── TableView.cs                # Tablas con bordes
 │       ├── LivePanel.cs                # Panel de logs dinámico
 │       ├── LiveConsole.cs              # Consola estilo chat
 │       └── TreeExplorer/
@@ -406,14 +418,14 @@ TermFlow.Net/
 
 TermFlow.Net usa secuencias ANSI estándar. Probado en:
 
-| Terminal | Estado |
-|----------|--------|
-| Windows Terminal (Win 10/11) | ✅ Recomendado en Windows |
+| Terminal                           | Estado                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| Windows Terminal (Win 10/11)       | ✅ Recomendado en Windows                                                             |
 | cmd.exe y powershell (Windows 10+) | ⚠️ Funciona, pero con la fuente `consolas` por defecto algunos glifos se ven como `?` |
-| Kitty | ✅ |
-| GNOME Terminal | ✅ |
-| Alacritty | ✅ |
-| cmd.exe (Windows 7-) | ⚠️ No testeado |
+| Kitty                              | ✅                                                                                    |
+| GNOME Terminal                     | ✅                                                                                    |
+| Alacritty                          | ✅                                                                                    |
+| cmd.exe (Windows 7-)               | ⚠️ No testeado                                                                        |
 
 > ⚠️ **Fuente**: los glifos usados (`▶ ✔ ✖ ⚠ ● ┌ ┐ └ ┘ ─ │`) son Unicode estándar, **no** Nerd Font. Cambiá la fuente de la terminal a **Cascadia Code**, **JetBrains Mono**, **Fira Code** o cualquier monoespaciada con buena cobertura Unicode. Ver [Requisitos](#requisitos) para más detalle.
 

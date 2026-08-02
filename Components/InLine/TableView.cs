@@ -3,9 +3,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
-namespace TermFlow.Components.FullScreen
+namespace TermFlow.Components.InLine
 {
     /// <summary>
     /// Renderizador de tablas con bordes Unicode y ancho de columna automático
