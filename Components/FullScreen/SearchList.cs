@@ -15,8 +15,18 @@ namespace TermFlow.Components.FullScreen
     /// </summary>
     public static class SearchList
     {
+        /// <summary>
+        /// Bool interno para prevenir la ejecución de múltiples searchlist a la vez.
+        /// </summary>
+        private static volatile bool isSearchListRunning = false;
+
         // Reducido a 7 tras eliminar la línea en blanco sobrante debajo del cuadro de búsqueda
         private const int ReservedRows = 8;
+
+        private static int _cursor = 0;
+        private static bool _exit = false;
+        private static readonly StringBuilder _query = new StringBuilder();
+
 
         /// <summary>
         /// Buscador de selección ÚNICA. Retorna el índice original del elemento o -1 si cancela.
@@ -27,66 +37,24 @@ namespace TermFlow.Components.FullScreen
         /// <returns>Índice original del ítem elegido, o -1 si el usuario cancela.</returns>
         public static async Task<int> FilterOneAsync(string title, string[] items, CancellationToken token = default)
         {
+            if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
+            else isSearchListRunning = true;
+
             Engine.EnterFullScreen();
             try
             {
-                int cursor = 0;
-                StringBuilder query = new StringBuilder();
-                StringBuilder buffer = new StringBuilder(2048);
-
-                ScrollState layout = new ScrollState();
-                bool shouldRender = true;
-                bool exit = false;
-                int result = -1;
                 var filtered = new List<(string Text, int OriginalIndex)>();
+                int result = -1;
 
                 var router = new InputRouter(false)
-                    .BindCancel(() => { result = -1; exit = true; })
-                    .BindConfirm(() => { if (filtered.Count > 0) { result = filtered[cursor].OriginalIndex; exit = true; } }, "elegir")
-                    .BindNavigate(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
-                    .BindScroll(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
-                    .Bind("Backspace", "borrar", () =>
-                    {
-                        if (query.Length > 0) { query.Remove(query.Length - 1, 1); cursor = 0; }
-                    }, ConsoleKey.Backspace)
-                    .BindUnhandled("Letras", "filtrar", (key) =>
-                    {
-                        if (!char.IsControl(key.KeyChar)) { query.Append(key.KeyChar); cursor = 0; }
-                    });
+                    .BindCancel(() => { result = -1; _exit = true; })
+                    .BindConfirm(() => { if (filtered.Count > 0) { result = filtered[_cursor].OriginalIndex; _exit = true; } }, "elegir");
 
-                while (!token.IsCancellationRequested && !exit)
-                {
-                    filtered.Clear();
-                    string currentQuery = query.ToString();
-                    for (int i = 0; i < items.Length; i++)
-                        if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
-                            filtered.Add((items[i], i));
-
-                    if (layout.Update(cursor, filtered.Count, ReservedRows))
-                    {
-                        shouldRender = true;
-                        Console.Write("\x1b[2J");
-                    }
-                    cursor = layout.Cursor;
-                    if (shouldRender)
-                    {
-                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, null, router);
-                        shouldRender = false;
-                    }
-
-                    var inputEvent = InputReader.ReadInput();
-                    if (inputEvent.Type != InputEventType.None)
-                    {
-                        shouldRender = true;
-                        router.Handle(inputEvent);
-                    }
-                    await Task.Delay(15, token);
-                }
-
+                await RunSearchEngine(title, items, filtered, null, router, token);
                 return result;
             }
             catch (OperationCanceledException) { return -1; }
-            finally { Engine.ExitFullScreen(); }
+            finally { Engine.ExitFullScreen(); isSearchListRunning = false; }
         }
 
         /// <summary>
@@ -99,18 +67,14 @@ namespace TermFlow.Components.FullScreen
         /// <returns>Arreglo con los índices originales marcados al confirmar, o vacío si el usuario cancela.</returns>
         public static async Task<int[]> FilterMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
+            if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
+            else isSearchListRunning = true;
+
             Engine.EnterFullScreen();
             try
             {
-                int cursor = 0;
-                StringBuilder query = new StringBuilder();
-                StringBuilder buffer = new StringBuilder(2048);
-
-                ScrollState layout = new ScrollState();
-                bool shouldRender = true;
-                bool exit = false;
-                int[] result = Array.Empty<int>();
                 var filtered = new List<(string Text, int OriginalIndex)>();
+                int[] result = Array.Empty<int>();
 
                 HashSet<int> selectedMap = new HashSet<int>();
                 if (preselected != null)
@@ -118,65 +82,95 @@ namespace TermFlow.Components.FullScreen
                         if (i < items.Length && preselected[i]) selectedMap.Add(i);
 
                 var router = new InputRouter(false)
-                    .BindCancel(() => { result = Array.Empty<int>(); exit = true; })
+                    .BindCancel(() => { result = Array.Empty<int>(); _exit = true; })
                     .BindConfirm(() =>
                     {
                         result = new int[selectedMap.Count];
-                        selectedMap.CopyTo(result); Array.Sort(result); exit = true;
+                        selectedMap.CopyTo(result); Array.Sort(result); _exit = true;
                     })
                     .BindSelect(() =>
                     {
                         if (filtered.Count > 0)
                         {
-                            int originalIdx = filtered[cursor].OriginalIndex;
+                            int originalIdx = filtered[_cursor].OriginalIndex;
                             if (selectedMap.Contains(originalIdx)) selectedMap.Remove(originalIdx);
                             else selectedMap.Add(originalIdx);
                         }
-                    })
-                    .BindNavigate(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
-                    .BindScroll(() => { if (cursor > 0) cursor--; }, () => { if (cursor < filtered.Count - 1) cursor++; })
-                    .Bind("Backspace", "borrar", () =>
-                    {
-                        if (query.Length > 0) { query.Remove(query.Length - 1, 1); cursor = 0; }
-                    }, ConsoleKey.Backspace)
-                    .BindUnhandled("Letras", "filtrar", (key) =>
-                    {
-                        if (!char.IsControl(key.KeyChar)) { query.Append(key.KeyChar); cursor = 0; }
                     });
 
-                while (!token.IsCancellationRequested && !exit)
-                {
-                    filtered.Clear();
-                    string currentQuery = query.ToString();
-                    for (int i = 0; i < items.Length; i++)
-                        if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
-                            filtered.Add((items[i], i));
-
-                    if (layout.Update(cursor, filtered.Count, ReservedRows))
-                    {
-                        shouldRender = true;
-                        Console.Write("\x1b[2J");
-                    }
-                    cursor = layout.Cursor;
-
-                    if (shouldRender)
-                    {
-                        RenderSearch(buffer, title, query.ToString(), filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
-                        shouldRender = false;
-                    }
-
-                    var inputEvent = InputReader.ReadInput();
-                    if (inputEvent.Type != InputEventType.None)
-                    {
-                        shouldRender = true;
-                        router.Handle(inputEvent);
-                    }
-                    await Task.Delay(15, token);
-                }
+                await RunSearchEngine(title, items, filtered, selectedMap, router, token);
                 return result;
             }
             catch (OperationCanceledException) { return Array.Empty<int>(); }
-            finally { Engine.ExitFullScreen(); }
+            finally { Engine.ExitFullScreen(); isSearchListRunning = false; }
+        }
+
+        /// <summary>
+        /// Motor central compartido que maneja el bucle de filtrado, renderizado y input.
+        /// </summary>
+        /// <param name="title">Título a mostrar en la cabecera.</param>
+        /// <param name="items">Lista completa de ítems originales.</param>
+        /// <param name="filtered">Lista de ítems filtrados que se irá llenando en cada ciclo.</param>
+        /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
+        /// <param name="router">Enrutador de input configurado.</param>
+        /// <param name="token">Token de cancelación.</param>
+        private static async Task RunSearchEngine(string title, string[] items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token)
+        {
+            ScrollState layout = new ScrollState();
+            StringBuilder buffer = new StringBuilder(2048);
+            bool shouldRender = true;
+
+            _cursor = 0;
+            _exit = false;
+            _query.Clear();
+
+            router.BindNavigate(
+                        () => { if (filtered.Count > 0) _cursor = (_cursor - 1 + filtered.Count) % filtered.Count; },
+                        () => { if (filtered.Count > 0) _cursor = (_cursor + 1) % filtered.Count; }
+                    )
+                    .BindScroll(
+                        () => { if (filtered.Count > 0) _cursor = (_cursor - 1 + filtered.Count) % filtered.Count; },
+                        () => { if (filtered.Count > 0) _cursor = (_cursor + 1) % filtered.Count; }
+                    )
+                    .Bind("Backspace", "borrar", () =>
+                    {
+                        if (_query.Length > 0) { _query.Remove(_query.Length - 1, 1); _cursor = 0; }
+                    }, ConsoleKey.Backspace)
+                    .BindUnhandled("Letras", "filtrar", (key) =>
+                    {
+                        if (!char.IsControl(key.KeyChar)) { _query.Append(key.KeyChar); _cursor = 0; }
+                    });
+
+            while (!token.IsCancellationRequested && !_exit)
+            {
+                // Filtrado dinámico
+                filtered.Clear();
+                string currentQuery = _query.ToString();
+                for (int i = 0; i < items.Length; i++)
+                    if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
+                        filtered.Add((items[i], i));
+
+                if (layout.Update(_cursor, filtered.Count, ReservedRows))
+                {
+                    shouldRender = true;
+                    Console.Write("\x1b[2J");
+                }
+                _cursor = layout.Cursor; // Sincroniza el cursor con los límites del layout
+
+                if (shouldRender)
+                {
+                    RenderSearch(buffer, title, currentQuery, filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
+                    shouldRender = false;
+                }
+
+                var inputEvent = InputReader.ReadInput();
+                if (inputEvent.Type != InputEventType.None)
+                {
+                    shouldRender = true;
+                    router.Handle(inputEvent);
+                }
+                await Task.Delay(15, token);
+            }
         }
 
         /// <summary>
@@ -193,7 +187,6 @@ namespace TermFlow.Components.FullScreen
         /// <param name="router">Enrutador que renderiza el footer contextual.</param>
         private static void RenderSearch(StringBuilder buffer, string title, string queryString, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
-
             buffer.Clear();
 
             // Mover cursor a origen
@@ -233,17 +226,13 @@ namespace TermFlow.Components.FullScreen
                     }
 
                     if (i == cursor)
-                    {
                         buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{filtered[i].Text}{ThemeColors.Reset}\x1b[K\n");
-                    }
                     else
-                    {
                         buffer.Append($"    {checkPrefix}{ThemeColors.Dim}{filtered[i].Text}{ThemeColors.Reset}\x1b[K\n");
-                    }
                 }
 
                 // Relleno de líneas vacías estricto
-                for (int i = (end - scroll); i < visibleRows; i++)
+                for (int i = end - scroll; i < visibleRows; i++)
                 {
                     buffer.Append("\x1b[K\n");
                 }

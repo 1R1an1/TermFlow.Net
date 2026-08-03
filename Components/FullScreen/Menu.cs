@@ -15,8 +15,17 @@ namespace TermFlow.Components.FullScreen
     /// </summary>
     public static class Menu
     {
+        /// <summary>
+        /// Bool interno para prevenir la ejecución de múltiples menus a la vez.
+        /// </summary>
+        private static volatile bool isMenuRunning = false;
+
         // FIX: Cambiado a 6 para empujar las instrucciones hacia arriba y dejar la última línea libre
         private const int ReservedRows = 7;
+
+        private static int _cursor = 0;
+        private static bool _exit = false;
+
 
         /// <summary>
         /// Muestra un menú de selección única a pantalla completa y espera la elección del usuario.
@@ -27,66 +36,23 @@ namespace TermFlow.Components.FullScreen
         /// <returns>Índice del item elegido, o -1 si el usuario cancela (Esc/q).</returns>
         public static async Task<int> SelectOneAsync(string title, string[] items, CancellationToken token = default)
         {
+            if (isMenuRunning) throw new InvalidOperationException("Ya hay un Menu activo");
+            else isMenuRunning = true;
+
             Engine.EnterFullScreen();
             try
             {
-                int cursor = 0;
-                int scroll = 0;
-                StringBuilder buffer = new StringBuilder(2048);
-
-                int lastHeight = Console.WindowHeight;
-                int lastWidth = Console.WindowWidth;
-                bool shouldRender = true;
-
-                bool exit = false; int result = -1;
+                int result = -1;
 
                 var router = new InputRouter()
-                    .BindCancel(() => { result = -1; exit = true; })
-                    .BindConfirm(() => { result = cursor; exit = true; })
-                    .BindNavigate(
-                        () => { if (cursor > 0) cursor--; },
-                        () => { if (cursor < items.Length - 1) cursor++; }
-                    )
-                    .BindScroll(
-                        () => { if (cursor > 0) cursor--; },
-                        () => { if (cursor < items.Length - 1) cursor++; }
-                    )
-                    .BindChar("g/G", "extremos", () => cursor = 0, 'g')
-                    .BindChar("", "", () => cursor = items.Length - 1, 'G');
+                    .BindCancel(() => { result = -1; _exit = true; })
+                    .BindConfirm(() => { result = _cursor; _exit = true; });
 
-                while (!token.IsCancellationRequested && !exit)
-                {
-                    if (Console.WindowHeight != lastHeight || Console.WindowWidth != lastWidth)
-                    {
-                        lastHeight = Console.WindowHeight;
-                        lastWidth = Console.WindowWidth;
-                        shouldRender = true;
-                        Console.Write("\x1b[2J");
-                    }
-
-                    int visibleRows = Math.Max(1, Console.WindowHeight - ReservedRows);
-
-                    if (cursor < scroll) { scroll = cursor; shouldRender = true; }
-                    if (cursor >= scroll + visibleRows) { scroll = cursor - visibleRows + 1; shouldRender = true; }
-
-                    if (shouldRender)
-                    {
-                        RenderMenu(buffer, title, items, cursor, scroll, visibleRows, null, router);
-                        shouldRender = false;
-                    }
-
-                    var inputEvent = InputReader.ReadInput();
-                    if (inputEvent.Type != InputEventType.None)
-                    {
-                        shouldRender = true;
-                        router.Handle(inputEvent);
-                    }
-                    await Task.Delay(15, token);
-                }
+                await RunMenuEngine(title, items, null, router, token);
                 return result;
             }
             catch (OperationCanceledException) { return -1; }
-            finally { Engine.ExitFullScreen(); }
+            finally { Engine.ExitFullScreen(); isMenuRunning = false; }
         }
 
         /// <summary>
@@ -99,15 +65,12 @@ namespace TermFlow.Components.FullScreen
         /// <returns>Arreglo con los índices marcados al confirmar (ordenado), o vacío si el usuario cancela.</returns>
         public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
         {
+            if (isMenuRunning) throw new InvalidOperationException("Ya hay un Menu activo");
+            else isMenuRunning = true;
+
             Engine.EnterFullScreen();
             try
             {
-                int cursor = 0;
-                StringBuilder buffer = new StringBuilder(2048);
-
-                ScrollState layout = new ScrollState();
-                bool shouldRender = true;
-                bool exit = false;
                 int[] result = Array.Empty<int>();
 
                 HashSet<int> selectedMap = new HashSet<int>();
@@ -118,53 +81,75 @@ namespace TermFlow.Components.FullScreen
                 var router = new InputRouter()
                     .BindSelect(() =>
                     {
-                        if (selectedMap.Contains(cursor)) selectedMap.Remove(cursor);
-                        else selectedMap.Add(cursor);
+                        if (selectedMap.Contains(_cursor)) selectedMap.Remove(_cursor);
+                        else selectedMap.Add(_cursor);
                     })
-                    .BindNavigate(
-                        () => { if (cursor > 0) cursor--; },
-                        () => { if (cursor < items.Length - 1) cursor++; }
-                    )
-                    .BindScroll(
-                        () => { if (cursor > 0) cursor--; },
-                        () => { if (cursor < items.Length - 1) cursor++; }
-                    )
-                    .BindChar("g/G", "extremos", () => cursor = 0, 'g')
-                    .BindChar("", "", () => cursor = items.Length - 1, 'G')
-                    .BindCancel(() => { result = Array.Empty<int>(); exit = true; })
+                    .BindCancel(() => { result = Array.Empty<int>(); _exit = true; })
                     .BindConfirm(() =>
                     {
                         result = new int[selectedMap.Count];
                         selectedMap.CopyTo(result);
                         Array.Sort(result);
-                        exit = true;
+                        _exit = true;
                     });
 
-                while (!token.IsCancellationRequested && !exit)
-                {
-                    if (layout.Update(cursor, items.Length, ReservedRows))
-                    {
-                        shouldRender = true; Console.Write("\x1b[2J");
-                    }
-                    cursor = layout.Cursor;
-                    if (shouldRender)
-                    {
-                        RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
-                        shouldRender = false;
-                    }
-
-                    var inputEvent = InputReader.ReadInput();
-                    if (inputEvent.Type != InputEventType.None)
-                    {
-                        shouldRender = true;
-                        router.Handle(inputEvent);
-                    }
-                    await Task.Delay(15, token);
-                }
+                await RunMenuEngine(title, items, selectedMap, router, token);
                 return result;
             }
             catch (OperationCanceledException) { return Array.Empty<int>(); }
-            finally { Engine.ExitFullScreen(); }
+            finally { Engine.ExitFullScreen(); isMenuRunning = false; }
+        }
+
+        /// <summary>
+        /// Motor central compartido que maneja el bucle de renderizado e input.
+        /// </summary>
+        /// <param name="title">Título a mostrar en la cabecera.</param>
+        /// <param name="items">Lista completa de ítems.</param>
+        /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
+        /// <param name="router">Enrutador de input configurado.</param>
+        /// <param name="token">Token de cancelación.</param>
+        private static async Task RunMenuEngine(string title, string[] items, HashSet<int> selectedMap, InputRouter router, CancellationToken token)
+        {
+            ScrollState layout = new ScrollState();
+            StringBuilder buffer = new StringBuilder(2048);
+            bool shouldRender = true;
+
+            _cursor = 0;
+            _exit = false;
+
+            router.BindNavigate(
+                        () => { if (items.Length > 0) _cursor = (_cursor - 1 + items.Length) % items.Length; },
+                        () => { if (items.Length > 0) _cursor = (_cursor + 1) % items.Length; }
+                    )
+                    .BindScroll(
+                        () => { if (items.Length > 0) _cursor = (_cursor - 1 + items.Length) % items.Length; },
+                        () => { if (items.Length > 0) _cursor = (_cursor + 1) % items.Length; }
+                    )
+                    .BindChar("g/G", "extremos", () => _cursor = 0, 'g')
+                    .BindChar("", "", () => _cursor = items.Length - 1, 'G');
+
+            while (!token.IsCancellationRequested && !_exit)
+            {
+                if (layout.Update(_cursor, items.Length, ReservedRows))
+                {
+                    shouldRender = true;
+                    Console.Write("\x1b[2J");
+                }
+
+                if (shouldRender)
+                {
+                    RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
+                    shouldRender = false;
+                }
+
+                var inputEvent = InputReader.ReadInput();
+                if (inputEvent.Type != InputEventType.None)
+                {
+                    shouldRender = true;
+                    router.Handle(inputEvent);
+                }
+                await Task.Delay(15, token);
+            }
         }
 
         /// <summary>
@@ -173,14 +158,13 @@ namespace TermFlow.Components.FullScreen
         /// <param name="buffer">StringBuilder reutilizable para ensamblar la salida.</param>
         /// <param name="title">Título a mostrar.</param>
         /// <param name="items">Lista completa de ítems.</param>
-        /// <param name="cursor">Índice del cursor actual.</param>
+        /// <param name="cursor">Índice del _cursor actual.</param>
         /// <param name="scroll">Índice del primer ítem visible.</param>
         /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox y marca los ítems incluidos.</param>
         /// <param name="router">Enrutador de input encargado de renderizar el footer contextual.</param>
         private static void RenderMenu(StringBuilder buffer, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
-
             buffer.Clear();
 
             // Mover al origen (0,0)
@@ -209,20 +193,14 @@ namespace TermFlow.Components.FullScreen
                 }
 
                 if (i == cursor)
-                {
                     buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{items[i]}{ThemeColors.Reset}\x1b[K\n");
-                }
                 else
-                {
                     buffer.Append($"    {checkPrefix}{ThemeColors.Dim}{items[i]}{ThemeColors.Reset}\x1b[K\n");
-                }
             }
 
             // Relleno estricto limpiando residuos del fondo
             for (int i = end - scroll; i < visibleRows; i++)
-            {
                 buffer.Append("\x1b[K\n");
-            }
 
             // Indicador inferior
             int remaining = items.Length - end;

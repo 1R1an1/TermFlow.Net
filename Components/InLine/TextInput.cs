@@ -18,7 +18,7 @@ namespace TermFlow.Components.InLine
         /// <summary>
         /// Bool interno para prevenir la ejecución concurrente de múltiples inputs a la vez.
         /// </summary>
-        private static bool isInputRunning = false;
+        private static volatile bool isInputRunning = false;
 
         /// <summary>
         /// Solicita una cadena de texto al usuario de manera asíncrona, permitiendo edición estilo terminal.
