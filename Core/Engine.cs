@@ -70,15 +70,15 @@ public static class Engine
         }
 
 
-        // 1. Captura SIGTERM (Cierre del sistema, kill ordinario) y salidas normales
-        AppDomain.CurrentDomain.ProcessExit += (s, e) => ExitFullScreen();
+        // Quitando la pantalla completa siempre antes de que se cierre la app
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => ExitFullScreen(true);
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => ExitFullScreen(true);
 
-        // 2. Captura SIGINT (Ctrl + C en la terminal)
-        Console.CancelKeyPress += (s, e) =>
+        Console.CancelKeyPress += (_, e) =>
         {
             // false significa: "Dejá que el proceso muera normalmente después de que termine este evento"
             e.Cancel = false;
-            ExitFullScreen();
+            ExitFullScreen(true);
         };
     }
 
@@ -112,13 +112,13 @@ public static class Engine
     /// Sale del modo pantalla completa restaurando mouse, cursor y buffer principal.
     /// Es idempotente: si no estaba activo, no hace nada.
     /// </summary>
-    public static void ExitFullScreen()
+    public static void ExitFullScreen(bool force = false)
     {
         // Secuencia de restauración total:
         // \x1b[?1002l\x1b[?1006l -> Apagar tracking de mouse
         // \x1b[?25h             -> Mostrar de nuevo el cursor nativo
         // \x1b[?1049l            -> Volver al main screen buffer restaurando todo como estaba antes
-        if (isFullScreen)
+        if (isFullScreen || force)
         {
             Console.Write("\x1b[?1000l\x1b[?1006l\x1b[?25h\x1b[?1049l");
             isFullScreen = false;
