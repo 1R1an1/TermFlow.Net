@@ -35,10 +35,13 @@ internal class Program
         Engine.Setup();
         ThemeColors.Primary = AnsiColor.Green + AnsiColor.Bold;
         ThemeColors.Selector = ThemeColors.Bright;
+
+        int lastChoice = 0;
         while (true)
         {
-            int choice = await SearchList.FilterOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems);
+            int choice = await SearchList.FilterOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems, lastChoice);
             if (choice == -1 || choice == MainMenuItems.Length - 1) break;
+            lastChoice = choice;
 
             try
             {

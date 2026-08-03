@@ -34,10 +34,12 @@ namespace TermFlow.Components.FullScreen
         /// <param name="items">Lista de opciones a elegir.</param>
         /// <param name="token">Token para cancelar la selección.</param>
         /// <returns>Índice del item elegido, o -1 si el usuario cancela (Esc/q).</returns>
-        public static async Task<int> SelectOneAsync(string title, string[] items, CancellationToken token = default)
+        public static async Task<int> SelectOneAsync(string title, string[] items, int startIndex = 0, CancellationToken token = default)
         {
             if (isMenuRunning) throw new InvalidOperationException("Ya hay un Menu activo");
             else isMenuRunning = true;
+
+            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -48,7 +50,7 @@ namespace TermFlow.Components.FullScreen
                     .BindCancel(() => { result = -1; _exit = true; })
                     .BindConfirm(() => { result = _cursor; _exit = true; });
 
-                await RunMenuEngine(title, items, null, router, token);
+                await RunMenuEngine(title, items, null, router, token, startIndex);
                 return result;
             }
             catch (OperationCanceledException) { return -1; }
@@ -63,10 +65,12 @@ namespace TermFlow.Components.FullScreen
         /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
         /// <param name="token">Token para cancelar la selección.</param>
         /// <returns>Arreglo con los índices marcados al confirmar (ordenado), o vacío si el usuario cancela.</returns>
-        public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
+        public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default)
         {
             if (isMenuRunning) throw new InvalidOperationException("Ya hay un Menu activo");
             else isMenuRunning = true;
+
+            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -93,7 +97,7 @@ namespace TermFlow.Components.FullScreen
                         _exit = true;
                     });
 
-                await RunMenuEngine(title, items, selectedMap, router, token);
+                await RunMenuEngine(title, items, selectedMap, router, token, startIndex);
                 return result;
             }
             catch (OperationCanceledException) { return Array.Empty<int>(); }
@@ -108,13 +112,13 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
         /// <param name="router">Enrutador de input configurado.</param>
         /// <param name="token">Token de cancelación.</param>
-        private static async Task RunMenuEngine(string title, string[] items, HashSet<int> selectedMap, InputRouter router, CancellationToken token)
+        private static async Task RunMenuEngine(string title, string[] items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex)
         {
             ScrollState layout = new ScrollState();
             StringBuilder buffer = new StringBuilder(2048);
             bool shouldRender = true;
 
-            _cursor = 0;
+            _cursor = startIndex;
             _exit = false;
 
             router.BindNavigate(

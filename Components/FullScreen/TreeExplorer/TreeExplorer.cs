@@ -264,6 +264,13 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
             List<ExplorerEntry> entries = await FetchEntriesAsync(dataSource, currentNode, token);
 
+            // Recuerda la posición del cursor al salir de un directorio
+            var cursorMemory = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            string _pendingBackTarget = null;
+
+            // Recuerda la posición del scroll (viewport) al salir
+            var layoutMemory = new Dictionary<string, ScrollState>(StringComparer.OrdinalIgnoreCase);
+
             bool exit = false;
             string[] result = Array.Empty<string>();
             bool nodeChanged = false; // Control de estado para carga asíncrona
@@ -277,33 +284,44 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                 .BindScroll(
                     () => { if (cursor > 0) cursor--; },
                     () => { if (entries.Count > 0 && cursor < entries.Count - 1) cursor++; }
-                );
-
-
-            router.Bind("l/→/Enter", isMulti ? "entrar" : "entrar/elegir", () =>
-            {
-                if (entries.Count == 0) return;
-                ExplorerEntry selected = entries[cursor];
-                if (selected.IsDirectory)
+                )
+                .Bind("l/→/Enter", isMulti ? "entrar" : "entrar/elegir", () =>
                 {
-                    currentNode = selected.Id;
-                    nodeChanged = true;
-                    cursor = 0;
-                }
-                else if (!isMulti && filter != ExplorerFilter.OnlyFolders)
+                    if (entries.Count == 0) return;
+                    ExplorerEntry selected = entries[cursor];
+                    if (selected.IsDirectory)
+                    {
+                        // Guardar posición actual antes de salir
+                        cursorMemory[currentNode] = cursor;
+                        layoutMemory[currentNode] = layout;
+
+                        currentNode = selected.Id;
+                        nodeChanged = true;
+                        // El cursor se fijará después de cargar las entradas
+                    }
+                    else if (!isMulti && filter != ExplorerFilter.OnlyFolders)
+                    {
+                        result = [selected.Id];
+                        exit = true;
+                    }
+                }, ConsoleKey.L, ConsoleKey.RightArrow, ConsoleKey.Enter)
+                .Bind("h/←", "volver", () =>
                 {
-                    result = [selected.Id];
-                    exit = true;
-                }
-            }, ConsoleKey.L, ConsoleKey.RightArrow, ConsoleKey.Enter);
+                    string parent = dataSource.GetParent(currentNode);
+                    if (!string.IsNullOrEmpty(parent))
+                    {
+                        // Guardar cursor del nodo actual
+                        cursorMemory[currentNode] = cursor;
+                        layoutMemory[currentNode] = layout;
 
-
-            router.Bind("h/←", "volver", () =>
-            {
-                string parent = dataSource.GetParent(currentNode);
-                if (!string.IsNullOrEmpty(parent))
-                    currentNode = parent; nodeChanged = true; cursor = 0;
-            }, ConsoleKey.H, ConsoleKey.LeftArrow);
+                        // Recordamos el nodo hijo para ubicarlo luego en el padre
+                        string childNode = currentNode;
+                        currentNode = parent;
+                        // Guardamos la referencia al hijo en una variable temporal (se usará tras cargar entradas)
+                        _pendingBackTarget = childNode;
+                        nodeChanged = true;
+                    }
+                }, ConsoleKey.H, ConsoleKey.LeftArrow);
 
             if (isMulti)
             {
@@ -314,9 +332,8 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                     if (filter == ExplorerFilter.OnlyFolders && !target.IsDirectory) return;
                     if (filter == ExplorerFilter.OnlyFiles && target.IsDirectory) return;
                     ToggleSelection(target.Id, marked, unmarkedExceptions, dataSource);
-                });
-
-                router.Bind("c", "Confirmar", () =>
+                })
+                .Bind("c", "Confirmar", () =>
                 {
                     var optimized = dataSource.ResolveMarkedEntries(marked, unmarkedExceptions, filter);
                     result = optimized ?? ResolveMarkedEntriesUniversal(dataSource, marked, unmarkedExceptions, filter);
@@ -358,6 +375,35 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                     if (nodeChanged)
                     {
                         entries = await FetchEntriesAsync(dataSource, currentNode, token);
+
+                        // Determinar el cursor deseado
+                        int newCursor = 0;
+                        ScrollState newLayout = new ScrollState(); // Por defecto, scroll nuevo
+
+                        if (_pendingBackTarget != null)
+                        {
+                            // Volviendo atrás: buscar el índice de la carpeta hija en las entradas del padre
+                            var targetId = _pendingBackTarget;
+                            int foundIndex = entries.FindIndex(e => string.Equals(e.Id, targetId, StringComparison.OrdinalIgnoreCase));
+                            newCursor = foundIndex >= 0 ? foundIndex : 0;
+                            _pendingBackTarget = null;
+
+                            // Restauramos el scroll de esta carpeta si lo teníamos
+                            if (layoutMemory.TryGetValue(currentNode, out var savedLayoutBack))
+                                newLayout = savedLayoutBack;
+                        }
+                        else if (cursorMemory.TryGetValue(currentNode, out int savedCursor))
+                        {
+                            // Restaurar cursor guardado para este directorio (si existe)
+                            newCursor = Math.Clamp(savedCursor, 0, entries.Count - 1);
+
+                            // Restauramos el scroll si habíamos entrado a esta carpeta antes
+                            if (layoutMemory.TryGetValue(currentNode, out var savedLayoutEnter))
+                                newLayout = savedLayoutEnter;
+                        }
+
+                        cursor = newCursor;
+                        layout = newLayout;
                         nodeChanged = false;
                     }
                 }

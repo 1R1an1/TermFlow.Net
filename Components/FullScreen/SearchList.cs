@@ -33,12 +33,15 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="title">Título a mostrar en la cabecera.</param>
         /// <param name="items">Lista de ítems sobre los que filtrar.</param>
+        /// <param name="startIndex">Índice inicial donde empezará el cursor antes de filtrar.</param>
         /// <param name="token">Token para cancelar la operación.</param>
         /// <returns>Índice original del ítem elegido, o -1 si el usuario cancela.</returns>
-        public static async Task<int> FilterOneAsync(string title, string[] items, CancellationToken token = default)
+        public static async Task<int> FilterOneAsync(string title, string[] items, int startIndex = 0, CancellationToken token = default)
         {
             if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
             else isSearchListRunning = true;
+
+            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -50,7 +53,7 @@ namespace TermFlow.Components.FullScreen
                     .BindCancel(() => { result = -1; _exit = true; })
                     .BindConfirm(() => { if (filtered.Count > 0) { result = filtered[_cursor].OriginalIndex; _exit = true; } }, "elegir");
 
-                await RunSearchEngine(title, items, filtered, null, router, token);
+                await RunSearchEngine(title, items, filtered, null, router, token, startIndex);
                 return result;
             }
             catch (OperationCanceledException) { return -1; }
@@ -63,12 +66,15 @@ namespace TermFlow.Components.FullScreen
         /// <param name="title">Título a mostrar en la cabecera.</param>
         /// <param name="items">Lista de ítems sobre los que filtrar.</param>
         /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
+        /// <param name="startIndex">Índice inicial donde empezará el cursor antes de filtrar.</param>
         /// <param name="token">Token para cancelar la operación.</param>
         /// <returns>Arreglo con los índices originales marcados al confirmar, o vacío si el usuario cancela.</returns>
-        public static async Task<int[]> FilterMultiAsync(string title, string[] items, bool[] preselected = null, CancellationToken token = default)
+        public static async Task<int[]> FilterMultiAsync(string title, string[] items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default)
         {
             if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
             else isSearchListRunning = true;
+
+            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -98,7 +104,7 @@ namespace TermFlow.Components.FullScreen
                         }
                     });
 
-                await RunSearchEngine(title, items, filtered, selectedMap, router, token);
+                await RunSearchEngine(title, items, filtered, selectedMap, router, token, startIndex);
                 return result;
             }
             catch (OperationCanceledException) { return Array.Empty<int>(); }
@@ -114,13 +120,14 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
         /// <param name="router">Enrutador de input configurado.</param>
         /// <param name="token">Token de cancelación.</param>
-        private static async Task RunSearchEngine(string title, string[] items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token)
+        /// <param name="startIndex">Índice inicial del cursor.</param>
+        private static async Task RunSearchEngine(string title, string[] items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex)
         {
             ScrollState layout = new ScrollState();
             StringBuilder buffer = new StringBuilder(2048);
             bool shouldRender = true;
 
-            _cursor = 0;
+            _cursor = startIndex;
             _exit = false;
             _query.Clear();
 
