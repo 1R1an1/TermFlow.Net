@@ -15,6 +15,7 @@ namespace TermFlow.Core
         private readonly Dictionary<ConsoleKey, Action> _keyHandlers = new();
         private readonly Dictionary<char, Action> _charHandlers = new();
         private Action<ConsoleKeyInfo> _unhandledHandler;
+        private Action<ConsoleKeyInfo> _beforeKeyHandler;
         private bool _enableDefaultChars;
         private Action _onScrollUp;
         private Action _onScrollDown;
@@ -194,6 +195,17 @@ namespace TermFlow.Core
             return this;
         }
 
+        /// <summary>
+        /// Registra un callback que se ejecuta antes de procesar cada tecla.
+        /// </summary>
+        /// <param name="handler">Acción que recibe la información completa de la tecla presionada.</param>
+        /// <returns>La misma instancia para encadenar configuraciones.</returns>
+        public InputRouter BeforeKey(Action<ConsoleKeyInfo> handler)
+        {
+            _beforeKeyHandler = handler;
+            return this;
+        }
+
         // --- PROCESADOR INTERNO DE INPUT ---
 
         /// <summary>
@@ -208,6 +220,7 @@ namespace TermFlow.Core
 
             if (evt.Type == InputEventType.Key)
             {
+                _beforeKeyHandler?.Invoke(evt.KeyInfo);
                 // 1. Prioridad: Caracteres exactos (Captura sutil de navegación Vim o letras directas)
                 if (_charHandlers.TryGetValue(evt.KeyInfo.KeyChar, out var charAction))
                 {
