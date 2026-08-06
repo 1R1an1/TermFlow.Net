@@ -327,6 +327,8 @@ namespace TermFlow.Components.FullScreen
                     int totalLines = 0;
                     int currentScroll;
                     int focusLineStart = -1; // Guarda la fila física inicial del input
+                    int focusLineOffset = 0;
+                    int focusCursorCol = 1;
 
                     lock (_lock)
                     {
@@ -338,8 +340,19 @@ namespace TermFlow.Components.FullScreen
 
                             // Capturar en qué fila física empieza la entrada con foco
                             if (FocusEntryId.HasValue && entry.Id == FocusEntryId.Value)
+                            {
                                 focusLineStart = totalLines;
 
+                                int targetLine = FocusVisualCol / width;
+                                focusLineOffset = entry.CachedWrappedLines.Count - 1;
+                                focusCursorCol = (FocusVisualCol % width) + 1;
+
+                                if (FocusVisualCol > 0 && FocusVisualCol % width == 0)
+                                {
+                                    focusLineOffset++;
+                                    focusCursorCol = 1;
+                                }
+                            }
                             totalLines += entry.PhysicalLineCount;
                         }
 
@@ -377,20 +390,11 @@ namespace TermFlow.Components.FullScreen
                     // --- Logica de cursor real de la consola ---
                     if (focusLineStart != -1 && focusLineStart >= visibleStart && focusLineStart < visibleEnd)
                     {
-                        int row = focusLineStart - visibleStart + 1; // ANSI es base 1
-                        int col = FocusVisualCol + 1; // ANSI es base 1
-                        width = Console.WindowWidth;
+                        int row = focusLineStart + focusLineOffset - visibleStart + 1; // ANSI es base 1
 
-                        // Ajustar si el cursor cayó en una línea envuelta (wrapped)
-                        if (col > width)
+                        if (row > 0 && row <= height) // Asegurar que no se salga de la pantalla visible
                         {
-                            row += (col - 1) / width;
-                            col = ((col - 1) % width) + 1;
-                        }
-
-                        if (row <= height) // Asegurar que no se salga de la pantalla visible
-                        {
-                            sb.Append($"\x1b[{row};{col}H");
+                            sb.Append($"\x1b[{row};{focusCursorCol}H");
                             sb.Append("\x1b[?25h"); // Mostrar cursor real
                         }
                     }

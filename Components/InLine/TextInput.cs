@@ -40,9 +40,14 @@ namespace TermFlow.Components.InLine
             long? dynamicId = null;
             StringBuilder inputBuffer = new StringBuilder();
             int cursorPos = 0;
-            int promptLength = prompt.GetVisualLength();
             string result = null;
             bool finished = false;
+
+            string lastPromptLine = prompt.Split('\n')[^1];
+            int promptLength = lastPromptLine.GetVisualLength();
+
+            int lastHeight = 0;
+            int moveDown = 0;
 
             if (LivePanel.IsActive)
             {
@@ -66,9 +71,41 @@ namespace TermFlow.Components.InLine
                 }
                 else
                 {
-                    Console.SetCursorPosition(promptLength, Console.CursorTop);
-                    Console.Write(inputBuffer.ToString() + " ");
-                    Console.SetCursorPosition(promptLength + cursorPos, Console.CursorTop);
+                    if (lastHeight == 1)
+                        Console.Write("\r\x1b[2K");
+                    else if (lastHeight != 0)
+                        Console.Write($"\x1b[{moveDown}B\r\x1b[{lastHeight - 1}F\x1b[0J");
+                    else
+                        Console.Write('\r');
+
+                    var text = (lastPromptLine + inputBuffer.ToString()).WrapText(Console.WindowWidth);
+                    var final = string.Join(Environment.NewLine, text);
+                    lastHeight = text.Count;
+
+                    // 2. Imprimir el prompt y el input del usuario
+                    Console.Write(final);
+
+                    // --- LÓGICA DEL CURSOR ---
+                    int width = Console.WindowWidth;
+                    int absPos = promptLength + cursorPos;
+
+                    // Calcular línea y columna destino basado en el wrap duro
+                    int targetLine = absPos / width;
+                    int targetCol = absPos % width;
+
+                    // El cursor actualmente está en la última línea (lastHeight - 1)
+                    int currentLine = lastHeight - 1;
+
+                    // 1. Subir la diferencia de líneas (si hace falta)
+                    int moveUp = currentLine - targetLine;
+                    moveDown = moveUp;
+                    if (moveUp > 0)
+                        Console.Write($"\x1b[{moveUp}A"); // A = Arriba
+
+                    // 2. Ir a la columna 0 y mover a la derecha
+                    Console.Write('\r');
+                    if (targetCol > 0)
+                        Console.Write($"\x1b[{targetCol}C"); // C = Derecha (Columna)
                 }
             }
 
