@@ -38,14 +38,7 @@ namespace TermFlow.Components.InLine
             else isInputRunning = true;
 
             long? dynamicId = null;
-            StringBuilder inputBuffer = new StringBuilder();
-            int cursorPos = 0;
-            string result = null;
-            bool finished = false;
-
-            string lastPromptLine = prompt.Split('\n')[^1];
-            int promptLength = lastPromptLine.GetVisualLength();
-
+            var editor = new LineEdit(prompt);
             int lastHeight = 0;
             int moveDown = 0;
 
@@ -53,7 +46,7 @@ namespace TermFlow.Components.InLine
             {
                 dynamicId = LivePanel.AddDynamic(prompt);
                 LivePanel.FocusEntryId = dynamicId;
-                LivePanel.FocusVisualCol = promptLength;
+                LivePanel.FocusVisualCol = editor.PromptLength;
             }
             else
             {
@@ -62,12 +55,14 @@ namespace TermFlow.Components.InLine
             }
 
             // Unificación del renderizado para no repetir código
-            void Render()
+            void Render(string text, int cursorPos, bool isFinished)
             {
+                if (isFinished) return; // Si terminó, el finally de abajo hace el WriteLine
+
                 if (LivePanel.IsActive)
                 {
-                    LivePanel.FocusVisualCol = promptLength + cursorPos;
-                    LivePanel.UpdateLine(dynamicId.Value, prompt + inputBuffer.ToString());
+                    LivePanel.FocusVisualCol = editor.PromptLength + cursorPos;
+                    LivePanel.UpdateLine(dynamicId.Value, prompt + text);
                 }
                 else
                 {
@@ -78,16 +73,16 @@ namespace TermFlow.Components.InLine
                     else
                         Console.Write('\r');
 
-                    var text = (lastPromptLine + inputBuffer.ToString()).WrapText(Console.WindowWidth);
-                    var final = string.Join(Environment.NewLine, text);
-                    lastHeight = text.Count;
+                    var wrappedText = (editor.LastPromptLine + text).WrapText(Console.WindowWidth);
+                    var finalText = string.Join(Environment.NewLine, wrappedText);
+                    lastHeight = wrappedText.Count;
 
                     // 2. Imprimir el prompt y el input del usuario
-                    Console.Write(final);
+                    Console.Write(finalText);
 
                     // --- LÓGICA DEL CURSOR ---
                     int width = Console.WindowWidth;
-                    int absPos = promptLength + cursorPos;
+                    int absPos = editor.PromptLength + cursorPos;
 
                     // Calcular línea y columna destino basado en el wrap duro
                     int targetLine = absPos / width;
@@ -109,80 +104,15 @@ namespace TermFlow.Components.InLine
                 }
             }
 
-            ConsoleKeyInfo currentKey = default;
-            var router = new InputRouter(false);
-
-
-            router.BindConfirm(() =>
-            {
-                result = inputBuffer.ToString();
-                finished = true;
-            });
-
-            router.Bind("", "", () =>
-            {
-                if ((currentKey.Modifiers & ConsoleModifiers.Control) != 0)
-                {
-                    int i = cursorPos - 1;
-                    while (i > 0 && (char.IsWhiteSpace(inputBuffer[i]) || inputBuffer[i] == '/' || inputBuffer[i] == '\\' || inputBuffer[i] == '.' || inputBuffer[i] == '-')) i--;
-                    while (i > 0 && !(char.IsWhiteSpace(inputBuffer[i - 1]) || inputBuffer[i - 1] == '/' || inputBuffer[i - 1] == '\\' || inputBuffer[i - 1] == '.' || inputBuffer[i - 1] == '-')) i--;
-                    cursorPos = Math.Max(0, i);
-                }
-                else cursorPos = Math.Max(0, cursorPos - 1);
-                Render();
-            }, ConsoleKey.LeftArrow);
-
-            router.Bind("", "", () =>
-            {
-                if ((currentKey.Modifiers & ConsoleModifiers.Control) != 0)
-                {
-                    int i = cursorPos;
-                    while (i < inputBuffer.Length && (char.IsWhiteSpace(inputBuffer[i]) || inputBuffer[i] == '/' || inputBuffer[i] == '\\' || inputBuffer[i] == '.' || inputBuffer[i] == '-')) i++;
-                    while (i < inputBuffer.Length && !(char.IsWhiteSpace(inputBuffer[i]) || inputBuffer[i] == '/' || inputBuffer[i] == '\\' || inputBuffer[i] == '.' || inputBuffer[i] == '-')) i++;
-                    cursorPos = i;
-                }
-                else cursorPos = Math.Min(inputBuffer.Length, cursorPos + 1);
-                Render();
-            }, ConsoleKey.RightArrow);
-
-            router.Bind("", "", () => { cursorPos = 0; Render(); }, ConsoleKey.Home);
-            router.Bind("", "", () => { cursorPos = inputBuffer.Length; Render(); }, ConsoleKey.End);
-
-            router.Bind("", "", () =>
-            {
-                if (cursorPos > 0) { inputBuffer.Remove(cursorPos - 1, 1); cursorPos--; Render(); }
-            }, ConsoleKey.Backspace);
-
-            router.Bind("", "", () =>
-            {
-                if (cursorPos < inputBuffer.Length) { inputBuffer.Remove(cursorPos, 1); Render(); }
-            }, ConsoleKey.Delete);
-
-            router.BindUnhandled("", "", (k) =>
-            {
-                if (!char.IsControl(k.KeyChar))
-                {
-                    inputBuffer.Insert(cursorPos, k.KeyChar);
-                    cursorPos++;
-                    Render();
-                }
-            });
-
             try
             {
                 if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
-                while (!finished && !token.IsCancellationRequested)
-                {
-                    currentKey = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
 
-                    // Enrutamos el evento a través de InputRouter
-                    var evt = new ConsoleInputEvent { Type = InputEventType.Key, KeyInfo = currentKey };
-                    router.Handle(evt);
-                }
+                string result = await editor.ExecuteAsync(Render, token);
 
-                if (finished)
+                if (result != null)
                 {
-                    if (LivePanel.IsActive) { LivePanel.FocusEntryId = null; LivePanel.UpdateLine(dynamicId.Value, prompt + inputBuffer.ToString()); }
+                    if (LivePanel.IsActive) { LivePanel.FocusEntryId = null; LivePanel.UpdateLine(dynamicId.Value, prompt + result); }
                     else Console.WriteLine();
                 }
                 return result;
