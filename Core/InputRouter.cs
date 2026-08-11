@@ -265,5 +265,33 @@ namespace TermFlow.Core
                     buffer.Append("   "); // Espaciado limpio entre bloques de comandos
             }
         }
+
+        /// <summary>
+        /// Genera la barra de instrucciones formateada y agrupada para el pie del componente.
+        /// </summary>
+        /// <returns>
+        /// Una cadena con las instrucciones formateadas para el footer, o
+        /// <see cref="string.Empty"/> si no hay grupos registrados.
+        /// </returns>
+        public string RenderFooter()
+        {
+            if (_footerGroups.Count == 0) return string.Empty;
+
+            var buffer = new StringBuilder(128);
+            for (int i = 0; i < _footerGroups.Count; i++)
+            {
+                var group = _footerGroups[i];
+
+                buffer.Append(ThemeColors.Warning)
+                      .Append(group.CachedKeysLabel)
+                      .Append(ThemeColors.Reset)
+                      .Append(' ')
+                      .Append(group.Description);
+
+                if (i < _footerGroups.Count - 1)
+                    buffer.Append("   "); // Espaciado limpio entre bloques de comandos
+            }
+            return buffer.ToString();
+        }
     }
 }

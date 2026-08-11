@@ -147,5 +147,39 @@ namespace TermFlow.Core
 
             return result.ToString();
         }
+
+        /// <summary>
+        /// Parsea un string separando el texto visible de las secuencias ANSI.
+        /// </summary>
+        /// <returns>Una colección de tuplas (Texto, EsAnsi).</returns>
+        public static IEnumerable<(string Segment, bool IsAnsi)> ParseAnsi(this string text)
+        {
+            if (string.IsNullOrEmpty(text)) yield break;
+
+            int i = 0;
+            while (i < text.Length)
+            {
+                // Si detectamos el inicio de una secuencia ANSI CSI (\x1b[ ... )
+                if (text[i] == '\x1b' && i + 1 < text.Length && text[i + 1] == '[')
+                {
+                    int end = i + 2;
+                    while (end < text.Length && !char.IsLetter(text[end]))
+                        end++;
+
+                    if (end < text.Length)
+                    {
+                        yield return (text.Substring(i, end - i + 1), true);
+                        i = end + 1;
+                        continue;
+                    }
+                }
+
+                // Si no es ANSI, extraer el bloque de texto puro hasta el próximo ANSI
+                int start = i;
+                while (i < text.Length && !(text[i] == '\x1b' && i + 1 < text.Length && text[i + 1] == '['))
+                    i++;
+                yield return (text.Substring(start, i - start), false);
+            }
+        }
     }
 }
