@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
-namespace TermFlow.Components.InLine
+namespace TermFlow.Components.Core
 {
     /// <summary>
     /// Editor de línea interactivo para entrada de texto en consola.
@@ -169,8 +169,6 @@ namespace TermFlow.Components.InLine
             {
                 var currentKey = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
                 var evt = new ConsoleInputEvent { Type = InputEventType.Key, KeyInfo = currentKey };
-                _currentModifiers = currentKey.Modifiers;
-
                 _router.Handle(evt);
             }
 

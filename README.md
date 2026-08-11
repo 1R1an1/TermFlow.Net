@@ -316,6 +316,7 @@ await console.RunAsync(">>> ", async (input) =>
 | `AnsiStringHelper` | Extensiones para envolver, truncar y medir strings respetando códigos ANSI.                                                  |
 | `ThemeColors`      | Paleta semántica central (`Success`, `Warning`, `Error`, `Info`, etc.). Modificable en runtime.                              |
 | `ConsoleGlyphs`    | Catálogo de glifos Unicode (`┌ ┐ └ ┘ ─ │ ✔ ⚠ ● ▶`). Modificable en runtime.                                                  |
+| `LineEdit`         | Logica de editor de línea que gestiona buffer, cursor y navegación. Es utilizado por TextInput.                              |
 
 ---
 
@@ -387,7 +388,8 @@ TermFlow.Net/
 │   ├── AnsiColor.cs                    # Wrapper de secuencias ANSI
 │   ├── AnsiStringHelper.cs             # Wrap/truncate/medida con ANSI
 │   ├── ThemeColors.cs                  # Paleta semántica
-│   └── ConsoleGlyphs.cs                # Glifos Unicode
+│   ├── ConsoleGlyphs.cs                # Glifos Unicode
+│   └── LineEdit.cs                     # Logica de editor de línea
 ├── Components/
 │   ├── InLine/
 │   │   ├── TextViewer.cs               # Info/Success/Warn/Error/Figlet
