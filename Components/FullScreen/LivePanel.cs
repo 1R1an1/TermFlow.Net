@@ -336,21 +336,66 @@ namespace TermFlow.Components.FullScreen
                         {
                             if (widthChanged) entry.RefreshCache(width);
 
+                            if (entry.CachedWrappedLines.Count > 0 && entry.CachedWrappedLines[^1].Length == width)
+                                entry.CachedWrappedLines.Add(string.Empty);
+
                             wrappedLines.Add(entry.CachedWrappedLines);
 
                             // Capturar en qué fila física empieza la entrada con foco
                             if (FocusEntryId.HasValue && entry.Id == FocusEntryId.Value)
                             {
                                 focusLineStart = totalLines;
+                                int wrappedCount = entry.CachedWrappedLines.Count;
 
-                                int targetLine = FocusVisualCol / width;
-                                focusLineOffset = entry.CachedWrappedLines.Count - 1;
-                                focusCursorCol = (FocusVisualCol % width) + 1;
-
-                                if (FocusVisualCol > 0 && FocusVisualCol % width == 0)
+                                if (wrappedCount > 0)
                                 {
-                                    focusLineOffset++;
-                                    focusCursorCol = 1;
+                                    int targetLine = 0;
+                                    int targetCol = 1;
+                                    int remaining = FocusVisualCol;
+                                    bool found = false;
+
+                                    // Matemática robusta: mapear posición absoluta a coordenada 2D (fila, columna)
+                                    for (int i = 0; i < wrappedCount; i++)
+                                    {
+                                        int lineLen = entry.CachedWrappedLines[i].Length;
+
+                                        if (remaining < lineLen)
+                                        {
+                                            targetLine = i;
+                                            targetCol = remaining + 1; // ANSI es 1-indexed
+                                            found = true;
+                                            break;
+                                        }
+                                        else if (remaining == lineLen)
+                                        {
+                                            // El cursor cae EXACTAMENTE al final de una línea
+                                            if (lineLen == width)
+                                            {
+                                                // Auto-wrap: el cursor salta a la siguiente línea, columna 1
+                                                targetLine = i + 1;
+                                                targetCol = 1;
+                                            }
+                                            else
+                                            {
+                                                // Salto de línea explícito (\n): el cursor se queda al final de esta línea
+                                                targetLine = i;
+                                                targetCol = remaining + 1;
+                                            }
+                                            found = true;
+                                            break;
+                                        }
+                                        remaining -= lineLen;
+                                    }
+
+                                    // Si se pasa del final del texto por seguridad, clampear a la última posición
+                                    if (!found)
+                                    {
+                                        targetLine = wrappedCount - 1;
+                                        targetCol = entry.CachedWrappedLines[^1].Length + 1;
+                                    }
+
+                                    focusLineOffset = targetLine;
+                                    focusCursorCol = Math.Max(1, Math.Min(targetCol, width));
                                 }
                             }
                             totalLines += entry.PhysicalLineCount;
@@ -396,6 +441,11 @@ namespace TermFlow.Components.FullScreen
                         {
                             sb.Append($"\x1b[{row};{focusCursorCol}H");
                             sb.Append("\x1b[?25h"); // Mostrar cursor real
+                        }
+                        else if (row == height + 1) // Auto-wrap en la última fila visible
+                        {
+                            sb.Append($"\x1b[{height};1H");
+                            sb.Append("\x1b[?25h");
                         }
                     }
                     else

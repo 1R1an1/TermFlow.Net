@@ -40,13 +40,15 @@ namespace TermFlow.Components.InLine
             long? dynamicId = null;
             var editor = new LineEdit(prompt);
             int lastHeight = 0;
-            int moveDown = 0;
+            int fullPromptVisualLength = prompt.Replace("\r", "").Replace("\n", "").GetVisualLength();
+            bool previousEndedOnExactWidth = false;
+            int lastCursorTargetLine = 0;
 
             if (LivePanel.IsActive)
             {
                 dynamicId = LivePanel.AddDynamic(prompt);
                 LivePanel.FocusEntryId = dynamicId;
-                LivePanel.FocusVisualCol = editor.PromptLength;
+                LivePanel.FocusVisualCol = fullPromptVisualLength;
             }
             else
             {
@@ -57,50 +59,52 @@ namespace TermFlow.Components.InLine
             // Unificación del renderizado para no repetir código
             void Render(string text, int cursorPos, bool isFinished)
             {
-                if (isFinished) return; // Si terminó, el finally de abajo hace el WriteLine
+                if (isFinished) return;
 
                 if (LivePanel.IsActive)
                 {
-                    LivePanel.FocusVisualCol = editor.PromptLength + cursorPos;
+                    LivePanel.FocusVisualCol = fullPromptVisualLength + cursorPos;
                     LivePanel.UpdateLine(dynamicId.Value, prompt + text);
                 }
                 else
                 {
-                    if (lastHeight == 1)
-                        Console.Write("\r\x1b[2K");
-                    else if (lastHeight != 0)
-                        Console.Write($"\x1b[{moveDown}B\r\x1b[{lastHeight - 1}F\x1b[0J");
-                    else
-                        Console.Write('\r');
-
-                    var wrappedText = (editor.LastPromptLine + text).WrapText(Console.WindowWidth);
-                    var finalText = string.Join(Environment.NewLine, wrappedText);
-                    lastHeight = wrappedText.Count;
-
-                    // 2. Imprimir el prompt y el input del usuario
-                    Console.Write(finalText);
-
-                    // --- LÓGICA DEL CURSOR ---
-                    int width = Console.WindowWidth;
+                    int w = Math.Max(1, Console.WindowWidth);
                     int absPos = editor.PromptLength + cursorPos;
+                    var lines = (editor.LastPromptLine + text).WrapText(w);
+                    int totalLines = lines.Count;
 
-                    // Calcular línea y columna destino basado en el wrap duro
-                    int targetLine = absPos / width;
-                    int targetCol = absPos % width;
+                    int targetLine = absPos / w;
+                    int targetCol = absPos % w;
+                    if (targetCol == w) { targetLine++; targetCol = 0; }
 
-                    // El cursor actualmente está en la última línea (lastHeight - 1)
-                    int currentLine = lastHeight - 1;
+                    // Recuperar cursor al fondo físico antes de limpiar
+                    int lastBottom = lastHeight - 1 + (previousEndedOnExactWidth ? 1 : 0);
+                    if (lastCursorTargetLine < lastBottom)
+                        Console.Write($"\x1b[{lastBottom - lastCursorTargetLine}B");
 
-                    // 1. Subir la diferencia de líneas (si hace falta)
-                    int moveUp = currentLine - targetLine;
-                    moveDown = moveUp;
-                    if (moveUp > 0)
-                        Console.Write($"\x1b[{moveUp}A"); // A = Arriba
+                    // Limpieza relativa
+                    int physLines = lastHeight + (previousEndedOnExactWidth ? 1 : 0);
+                    if (physLines > 1) Console.Write($"\x1b[{physLines - 1}F");
+                    Console.Write("\r\x1b[0J");
 
-                    // 2. Ir a la columna 0 y mover a la derecha
+                    // Impresión
+                    bool endsExact = lines.Count > 0 && lines[^1].Length == w;
+                    Console.Write(string.Join("\n", lines));
+                    if (endsExact) Console.Write("\n");
+
+                    // Posicionar cursor
+                    int currentPhys = totalLines + (endsExact ? 1 : 0);
+                    int move = targetLine - (currentPhys - 1);
+                    if (move < 0) Console.Write($"\x1b[{-move}A");
+                    else if (move > 0) Console.Write($"\x1b[{move}B");
+
                     Console.Write('\r');
-                    if (targetCol > 0)
-                        Console.Write($"\x1b[{targetCol}C"); // C = Derecha (Columna)
+                    if (targetCol > 0) Console.Write($"\x1b[{targetCol}C");
+
+                    // Guardar estado
+                    lastHeight = totalLines;
+                    previousEndedOnExactWidth = endsExact;
+                    lastCursorTargetLine = targetLine;
                 }
             }
 
