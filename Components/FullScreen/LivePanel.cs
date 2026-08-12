@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Components.Core;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
@@ -64,7 +65,7 @@ namespace TermFlow.Components.FullScreen
             /// <param name="force">Si <c>true</c>, fuerza el recálculo aunque el ancho no haya cambiado.</param>
             public void RefreshCache(int consoleWidth, bool force = false)
             {
-                if (force || _lastConsoleWidth != consoleWidth || CachedWrappedLines.Count == 0)
+                if (force || _lastConsoleWidth != consoleWidth || PhysicalLineCount == 0)
                 {
                     CachedWrappedLines = FullText.WrapText(consoleWidth);
                     _lastConsoleWidth = consoleWidth;
@@ -336,7 +337,7 @@ namespace TermFlow.Components.FullScreen
                         {
                             if (widthChanged) entry.RefreshCache(width);
 
-                            if (entry.CachedWrappedLines.Count > 0 && entry.CachedWrappedLines[^1].Length == width)
+                            if (entry.PhysicalLineCount > 0 && entry.CachedWrappedLines[^1].Length == width)
                                 entry.CachedWrappedLines.Add(string.Empty);
 
                             wrappedLines.Add(entry.CachedWrappedLines);
@@ -345,55 +346,11 @@ namespace TermFlow.Components.FullScreen
                             if (FocusEntryId.HasValue && entry.Id == FocusEntryId.Value)
                             {
                                 focusLineStart = totalLines;
-                                int wrappedCount = entry.CachedWrappedLines.Count;
+                                int wrappedCount = entry.PhysicalLineCount;
 
                                 if (wrappedCount > 0)
                                 {
-                                    int targetLine = 0;
-                                    int targetCol = 1;
-                                    int remaining = FocusVisualCol;
-                                    bool found = false;
-
-                                    // Matemática robusta: mapear posición absoluta a coordenada 2D (fila, columna)
-                                    for (int i = 0; i < wrappedCount; i++)
-                                    {
-                                        int lineLen = entry.CachedWrappedLines[i].Length;
-
-                                        if (remaining < lineLen)
-                                        {
-                                            targetLine = i;
-                                            targetCol = remaining + 1; // ANSI es 1-indexed
-                                            found = true;
-                                            break;
-                                        }
-                                        else if (remaining == lineLen)
-                                        {
-                                            // El cursor cae EXACTAMENTE al final de una línea
-                                            if (lineLen == width)
-                                            {
-                                                // Auto-wrap: el cursor salta a la siguiente línea, columna 1
-                                                targetLine = i + 1;
-                                                targetCol = 1;
-                                            }
-                                            else
-                                            {
-                                                // Salto de línea explícito (\n): el cursor se queda al final de esta línea
-                                                targetLine = i;
-                                                targetCol = remaining + 1;
-                                            }
-                                            found = true;
-                                            break;
-                                        }
-                                        remaining -= lineLen;
-                                    }
-
-                                    // Si se pasa del final del texto por seguridad, clampear a la última posición
-                                    if (!found)
-                                    {
-                                        targetLine = wrappedCount - 1;
-                                        targetCol = entry.CachedWrappedLines[^1].Length + 1;
-                                    }
-
+                                    var (targetLine, targetCol) = LineEdit.MapPositionTo2D(entry.CachedWrappedLines, FocusVisualCol, width);
                                     focusLineOffset = targetLine;
                                     focusCursorCol = Math.Max(1, Math.Min(targetCol, width));
                                 }

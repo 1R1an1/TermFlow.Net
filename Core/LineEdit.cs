@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 1R1an1 */
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -173,6 +174,70 @@ namespace TermFlow.Components.Core
             }
 
             return _isFinished ? _buffer.ToString() : null;
+        }
+
+        /// <summary>
+        /// Mapea una posición 1D absoluta del buffer de texto a coordenadas 2D (fila y columna)
+        /// basándose en las líneas físicas generadas por el envoltorio (wrap) de la terminal.
+        /// Considera los saltos de línea explícitos (\n) y el auto-wrap de la terminal (borde exacto).
+        /// </summary>
+        /// <param name="wrappedLines">La lista de líneas físicas resultante de aplicar <c>WrapText</c> al texto completo. No debe ser nula.</param>
+        /// <param name="absolutePos">La posición absoluta del cursor (0-indexed) contando desde el inicio lógico del texto.</param>
+        /// <param name="width">El ancho actual de la consola en columnas, utilizado para detectar si una línea terminó por un auto-wrap de la terminal (su longitud iguala el ancho).</param>
+        /// <returns>
+        /// Una tupla <c>(int targetLine, int targetCol)</c> donde:
+        /// <c>targetLine</c> es el índice de la línea (0-indexed) dentro de <paramref name="wrappedLines"/>.
+        /// <c>targetCol</c> es la columna física (1-indexed, lista para ANSI) donde debe situarse el cursor.
+        /// </returns>
+        public static (int targetLine, int targetCol) MapPositionTo2D(List<string> wrappedLines, int absolutePos, int width)
+        {
+            if (wrappedLines == null || wrappedLines.Count == 0)
+                return (0, 1);
+
+            int targetLine = 0;
+            int targetCol = 1; // ANSI es 1-indexed
+            int remaining = absolutePos;
+            bool found = false;
+
+            for (int i = 0; i < wrappedLines.Count; i++)
+            {
+                int lineLen = wrappedLines[i].GetVisualLength();
+
+                if (remaining < lineLen)
+                {
+                    targetLine = i;
+                    targetCol = remaining + 1;
+                    found = true;
+                    break;
+                }
+                else if (remaining == lineLen)
+                {
+                    if (lineLen == width)
+                    {
+                        // Auto-wrap: salta a la siguiente línea, columna 1
+                        targetLine = i + 1;
+                        targetCol = 1;
+                    }
+                    else
+                    {
+                        // Salto de línea explícito (\n): se queda al final de esta línea
+                        targetLine = i;
+                        targetCol = remaining + 1;
+                    }
+                    found = true;
+                    break;
+                }
+                remaining -= lineLen;
+            }
+
+            // Seguridad: si se pasa del final
+            if (!found)
+            {
+                targetLine = wrappedLines.Count - 1;
+                targetCol = wrappedLines[^1].GetVisualLength() + 1;
+            }
+
+            return (targetLine, targetCol);
         }
     }
 }

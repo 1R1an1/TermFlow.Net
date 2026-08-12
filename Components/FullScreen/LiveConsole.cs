@@ -334,49 +334,7 @@ namespace TermFlow.Components.FullScreen
                 int promptLastLineLen = promptLastLine.GetVisualLength();
                 int absoluteVisualPos = promptLastLineLen + _cursorPos;
 
-                int targetLine = 0;
-                int targetCol = 1; // ANSI es 1-indexed
-                int remaining = absoluteVisualPos;
-                bool found = false;
-
-                for (int i = 0; i < wrappedInputLines.Count; i++)
-                {
-                    int lineLen = wrappedInputLines[i].GetVisualLength();
-
-                    if (remaining < lineLen)
-                    {
-                        targetLine = i;
-                        targetCol = remaining + 1;
-                        found = true;
-                        break;
-                    }
-                    else if (remaining == lineLen)
-                    {
-                        // El cursor cae EXACTAMENTE al final de una línea
-                        if (lineLen == width)
-                        {
-                            // Auto-wrap: salta a la siguiente línea, columna 1
-                            targetLine = i + 1;
-                            targetCol = 1;
-                        }
-                        else
-                        {
-                            // Salto de línea explícito (\n): se queda al final de esta línea
-                            targetLine = i;
-                            targetCol = remaining + 1;
-                        }
-                        found = true;
-                        break;
-                    }
-                    remaining -= lineLen;
-                }
-
-                // Seguridad: si se pasa del final del texto por algún desajuste
-                if (!found)
-                {
-                    targetLine = wrappedInputLines.Count - 1;
-                    targetCol = wrappedInputLines[^1].GetVisualLength() + 1;
-                }
+                var (targetLine, targetCol) = LineEdit.MapPositionTo2D(wrappedInputLines, absoluteVisualPos, width);
 
                 // Calcular fila física real en la pantalla
                 int inputStartRow = logRowsAvailable + 2; // +1 por divider, +1 por base-1 de ANSI
