@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Core;
+using TermFlow.Components.Core;
 
 namespace TermFlow.Components.FullScreen
 {
@@ -15,18 +16,12 @@ namespace TermFlow.Components.FullScreen
     /// </summary>
     public static class SearchList
     {
-        /// <summary>
-        /// Bool interno para prevenir la ejecución de múltiples searchlist a la vez.
-        /// </summary>
+        /// <summary>Bool interno para prevenir la ejecución de múltiples searchlist a la vez.</summary>
         private static volatile bool isSearchListRunning = false;
-
-        // Reducido a 7 tras eliminar la línea en blanco sobrante debajo del cuadro de búsqueda
         private const int ReservedRows = 8;
 
         private static int _cursor = 0;
         private static bool _exit = false;
-        private static readonly StringBuilder _query = new StringBuilder();
-
 
         /// <summary>
         /// Buscador de selección ÚNICA. Retorna el índice original del elemento o -1 si cancela.
@@ -126,10 +121,11 @@ namespace TermFlow.Components.FullScreen
             ScrollState layout = new ScrollState();
             StringBuilder buffer = new StringBuilder(2048);
             bool shouldRender = true;
+            Console.CursorVisible = true;
+            var searchEdit = new LineEdit("  Buscar: » ", router);
 
             _cursor = startIndex;
             _exit = false;
-            _query.Clear();
 
             router.BindNavigate(
                         () => { if (filtered.Count > 0) _cursor = (_cursor - 1 + filtered.Count) % filtered.Count; },
@@ -138,21 +134,23 @@ namespace TermFlow.Components.FullScreen
                     .BindScroll(
                         () => { if (filtered.Count > 0) _cursor = (_cursor - 1 + filtered.Count) % filtered.Count; },
                         () => { if (filtered.Count > 0) _cursor = (_cursor + 1) % filtered.Count; }
-                    )
-                    .Bind("Backspace", "borrar", () =>
-                    {
-                        if (_query.Length > 0) { _query.Remove(_query.Length - 1, 1); _cursor = 0; }
-                    }, ConsoleKey.Backspace)
-                    .BindUnhandled("Letras", "filtrar", (key) =>
-                    {
-                        if (!char.IsControl(key.KeyChar)) { _query.Append(key.KeyChar); _cursor = 0; }
-                    });
+                    );
+
+            string currentQuery = "";
+            int searchCursorPos = 0;
+
+            // El handler de LineEdit actualiza nuestras variables locales para el renderizado
+            searchEdit.SetRenderHandler((text, cursor, isFinished) =>
+            {
+                currentQuery = text;
+                searchCursorPos = cursor;
+                shouldRender = true;
+            });
 
             while (!token.IsCancellationRequested && !_exit)
             {
                 // Filtrado dinámico
                 filtered.Clear();
-                string currentQuery = _query.ToString();
                 for (int i = 0; i < items.Length; i++)
                     if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
                         filtered.Add((items[i], i));
@@ -162,41 +160,38 @@ namespace TermFlow.Components.FullScreen
                     shouldRender = true;
                     Console.Write("\x1b[2J");
                 }
-                _cursor = layout.Cursor; // Sincroniza el cursor con los límites del layout
+                _cursor = layout.Cursor;
 
                 if (shouldRender)
                 {
-                    RenderSearch(buffer, title, currentQuery, filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
+                    RenderSearch(buffer, title, currentQuery, searchCursorPos, filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router, searchEdit);
                     shouldRender = false;
                 }
 
                 var inputEvent = InputReader.ReadInput();
-                if (inputEvent.Type != InputEventType.None)
-                {
-                    shouldRender = true;
-                    router.Handle(inputEvent);
-                }
+                if (inputEvent.Type != InputEventType.None) router.Handle(inputEvent);
                 await Task.Delay(15, token);
             }
+            Console.CursorVisible = false;
         }
 
         /// <summary>
-        /// Dibuja el buscador completo (cabecera, query, ítems filtrados, indicadores de scroll y footer).
+        /// Dibuja el buscador completo (cabecera, query, ítems filtrados, indicadores de scroll, footer y cursor).
         /// </summary>
         /// <param name="buffer">StringBuilder reutilizable.</param>
         /// <param name="title">Título a mostrar.</param>
         /// <param name="queryString">Texto actual de la búsqueda.</param>
+        /// <param name="searchCursorPos">Posición del cursor dentro del texto de búsqueda.</param>
         /// <param name="filtered">Lista de ítems filtrados con su índice original.</param>
         /// <param name="cursor">Índice del cursor dentro de los filtrados.</param>
         /// <param name="scroll">Índice del primer ítem visible.</param>
         /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox marcando estos índices originales.</param>
         /// <param name="router">Enrutador que renderiza el footer contextual.</param>
-        private static void RenderSearch(StringBuilder buffer, string title, string queryString, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
+        /// <param name="searchEdit">Instancia de <see cref="LineEdit"/> para acceder al largo visual del prompt.</param>
+        private static void RenderSearch(StringBuilder buffer, string title, string queryString, int searchCursorPos, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router, LineEdit searchEdit)
         {
             buffer.Clear();
-
-            // Mover cursor a origen
             buffer.Append("\x1b[H");
 
             // Cabecera
@@ -204,8 +199,8 @@ namespace TermFlow.Components.FullScreen
             buffer.Append($"  {title}\x1b[K\n");
             buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
 
-            // Input de búsqueda predictiva (Ya no tiene el \n extra abajo, se une directo al indicador)
-            buffer.Append($"  Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}_\x1b[K\n");
+            // Input de búsqueda (sin el _ falso, ahora usamos cursor real)
+            buffer.Append($"  Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}\x1b[K\n");
 
             int end = Math.Min(filtered.Count, scroll + visibleRows);
 
@@ -223,7 +218,6 @@ namespace TermFlow.Components.FullScreen
             {
                 for (int i = scroll; i < end; i++)
                 {
-                    // Determinar prefijo checkbox si estamos en modo Selección Múltiple
                     string checkPrefix = "";
                     if (selectedMap != null)
                     {
@@ -239,10 +233,7 @@ namespace TermFlow.Components.FullScreen
                 }
 
                 // Relleno de líneas vacías estricto
-                for (int i = end - scroll; i < visibleRows; i++)
-                {
-                    buffer.Append("\x1b[K\n");
-                }
+                for (int i = end - scroll; i < visibleRows; i++) buffer.Append("\x1b[K\n");
             }
 
             // Indicador de scroll inferior
@@ -250,10 +241,17 @@ namespace TermFlow.Components.FullScreen
             if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
             else buffer.Append("\x1b[K\n");
 
-            // Barra de instrucciones contextual interactiva
+            // Footer
             router.RenderFooter(buffer);
-            buffer.Append("\x1b[K\n");
-            buffer.Append("\x1b[K");
+            buffer.Append("\x1b[K\n\x1b[K");
+
+            // --- POSICIONAMIENTO DEL CURSOR REAL ---
+            int width = Console.WindowWidth;
+            var wrappedQueryLines = (searchEdit.LastPromptLine + queryString).WrapText(width);
+            var (targetLine, targetCol) = LineEdit.MapPositionTo2D(wrappedQueryLines, searchEdit.PromptLength + searchCursorPos, width);
+
+            int cursorRow = 4 + targetLine; // La fila 4 es donde empieza el input de búsqueda
+            buffer.Append($"\x1b[{cursorRow};{targetCol}H");
 
             Console.Write(buffer.ToString());
         }
