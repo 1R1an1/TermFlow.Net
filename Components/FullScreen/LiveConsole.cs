@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Components.Core;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
@@ -20,20 +21,75 @@ namespace TermFlow.Components.FullScreen
         private readonly object _stateLock = new(); // Bloqueo unificado para variables de estado
         private readonly int _maxLogs;
 
+        /// <summary>Máximo desplazamiento permitido del scroll en base al total de líneas y el alto de la consola.</summary>
+        private int _maxScroll;
+
         private string _inputBuffer = "";
         private bool _hasNewLogsBelow = false;
         private int _scrollOffset = 0; // 0 = Enganchado al fondo (Sticky)
 
         private readonly SemaphoreSlim _renderSignal = new(0, 1);
-        private int _renderPending;
 
-        /// <summary>
+        /// <summary>Enrutador de entrada compartido entre LiveConsole y LineEdit.</summary>
+        private InputRouter _router = null;
+
+        /// <summary>Componente de edición de línea con todos los bindings de teclado.</summary>
+        private LineEdit _lineEdit = null;
+
+        /// <summary>Token source interno para cancelar la sesión desde cualquier bind.</summary>
+        private CancellationTokenSource _internalCts;
+
+        private int _renderPending;
+        private int _cursorPos;
+
+        /// <summary> 
         /// Crea una nueva instancia de <see cref="LiveConsole"/>.
         /// </summary>
         /// <param name="maxLogs">Cantidad máxima de logs a retener en memoria (FIFO).</param>
         public LiveConsole(int maxLogs = 1000)
         {
             _maxLogs = maxLogs;
+
+            // --- Configuración única del InputRouter con las acciones propias de LiveConsole ---
+            _router = new InputRouter(false)
+
+            // Scroll de teclado (PageUp/PageDown conservan el comportamiento sin chocar con las flechas)
+            .BindNavigate(() =>
+            {
+                lock (_stateLock) _scrollOffset++;
+                RequestRender();
+            }, () =>
+            {
+                lock (_stateLock) _scrollOffset = Math.Max(0, _scrollOffset - 1);
+                RequestRender();
+            })
+            .Bind("", "", () =>
+            {
+                lock (_stateLock) _scrollOffset = _maxScroll;
+                RequestRender();
+            }, ConsoleKey.PageUp)
+
+            // Ir al final del historial
+            .Bind("", "", () =>
+            {
+                lock (_stateLock) _scrollOffset = 0;
+                RequestRender();
+            }, ConsoleKey.PageDown)
+
+            // Escape cancela la sesión
+            .BindCancel(() => _internalCts?.Cancel())
+
+            // Scroll de logs
+            .BindScroll(() =>
+            {
+                lock (_stateLock) _scrollOffset += 3;
+                RequestRender();
+            }, () =>
+            {
+                lock (_stateLock)
+                    _scrollOffset = Math.Max(0, _scrollOffset - 3);
+                RequestRender();
+            });
         }
 
         /// <summary>
@@ -52,7 +108,7 @@ namespace TermFlow.Components.FullScreen
                 {
                     int width = 80;
                     try { width = Console.WindowWidth; } catch { }
-                    int newLines = message.WrapText(width).Count;
+                    int newLines = message.CountPhysicalLines(width);
                     _scrollOffset += newLines;
 
                     _hasNewLogsBelow = true;
@@ -77,10 +133,30 @@ namespace TermFlow.Components.FullScreen
             Engine.EnterFullScreen(); // Nos adueñamos de la pantalla y activamos el mouse
             Console.CursorVisible = true;
 
-            using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            _internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+
+            // --- Creación del LineEdit con el _router compartido ---
+            _lineEdit = _lineEdit ?? new LineEdit(prompt, _router);
+            _lineEdit.SetRenderHandler((text, cursor, isFinished) =>
+            {
+                lock (_stateLock)
+                {
+                    _cursorPos = cursor;
+                    _inputBuffer = text;
+                    if (isFinished)
+                    {
+                        if (text.Trim().Equals("/exit", StringComparison.OrdinalIgnoreCase))
+                            _internalCts.Cancel();
+                        else
+                            Task.Run(() => onInputSubmitted(text));
+                        _lineEdit.Clear();
+                    }
+                }
+                RequestRender();
+            });
 
             // Hilo 1: Lector reactivo de teclado y mouse
-            Task inputTask = Task.Run(() => ProcessInput(internalCts, onInputSubmitted), internalCts.Token);
+            Task inputTask = Task.Run(() => ProcessInput(_internalCts.Token), _internalCts.Token);
             RequestRender();
 
             try
@@ -89,9 +165,9 @@ namespace TermFlow.Components.FullScreen
                 int lastWidth = Console.WindowWidth;
                 int lastHeight = Console.WindowHeight;
 
-                while (!internalCts.Token.IsCancellationRequested)
+                while (!_internalCts.Token.IsCancellationRequested)
                 {
-                    await _renderSignal.WaitAsync(internalCts.Token);
+                    await _renderSignal.WaitAsync(_internalCts.Token);
                     Interlocked.Exchange(ref _renderPending, 0);
 
                     // Pequeña validación de Resize por si el usuario estira la ventana
@@ -108,7 +184,8 @@ namespace TermFlow.Components.FullScreen
             catch (OperationCanceledException) { }
             finally
             {
-                internalCts.Cancel();
+                _internalCts.Cancel();
+                _internalCts.Dispose();
                 await inputTask; // Esperamos que cierre el lector
                 Engine.ExitFullScreen(); // Devolvemos la consola a su estado natural
             }
@@ -125,14 +202,11 @@ namespace TermFlow.Components.FullScreen
         }
 
         /// <summary>
-        /// Loop de input que procesa teclado y rueda del mouse, actualizando el buffer
-        /// de entrada y el scroll. Detecta /exit y Escape para cerrar la sesión.
+        /// Loop de input que procesa teclado y rueda del mouse, delegando todo al <see cref="InputRouter"/>.
         /// </summary>
-        /// <param name="cts">Token source interno para cancelar la sesión al recibir /exit o Escape.</param>
-        /// <param name="onInputSubmitted">Callback async que recibe cada mensaje enviado.</param>
-        private async Task ProcessInput(CancellationTokenSource cts, Func<string, Task> onInputSubmitted)
+        /// <param name="token">Token de cancelación para detener el bucle.</param>
+        private async Task ProcessInput(CancellationToken token)
         {
-            var token = cts.Token;
             try
             {
                 while (!token.IsCancellationRequested)
@@ -140,83 +214,13 @@ namespace TermFlow.Components.FullScreen
                     var input = InputReader.ReadInput();
                     if (input.Type == InputEventType.None)
                     {
-                        // Si no hay tecla dormimos el hilo 15ms para no fundir el procesador
                         await Task.Delay(15, token);
                         continue;
                     }
 
-                    if (input.Type == InputEventType.ScrollUp)
-                    {
-                        lock (_stateLock)
-                            _scrollOffset += 3; // Rueda Arriba
-                        RequestRender();
-                        continue;
-                    }
-                    else if (input.Type == InputEventType.ScrollDown)
-                    {
-                        lock (_stateLock)
-                            _scrollOffset = Math.Max(0, _scrollOffset - 3); // Rueda Abajo
-                        RequestRender();
-                        continue;
-                    }
+                    // El router tiene los binds de LiveConsole y los del LineEdit.
+                    _router.Handle(input);
 
-                    lock (_stateLock)
-                    {
-                        var key = input.KeyInfo;
-                        if (key.Key == ConsoleKey.Enter)
-                        {
-                            // Detectar Shift+Enter o Alt+Enter para salto de línea interno
-                            bool WantsNewLine = (key.Modifiers & ConsoleModifiers.Shift) != 0 ||
-                                                (key.Modifiers & ConsoleModifiers.Alt) != 0;
-
-                            if (WantsNewLine)
-                            {
-                                _inputBuffer += "\n";
-                                _scrollOffset = 0; // Lleva la vista al presente al escribir
-                            }
-                            else
-                            {
-                                // Enter común: Enviar mensaje
-                                if (!string.IsNullOrWhiteSpace(_inputBuffer))
-                                {
-                                    string msg = _inputBuffer;
-                                    _inputBuffer = "";
-                                    _scrollOffset = 0; // Al enviar algo, el scroll se pega abajo al 100%
-
-                                    // SOPORTE PARA /EXIT: Si escribe /exit, cancelamos el CTS y salimos
-                                    if (msg.Trim().Equals("/exit", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        cts.Cancel();
-                                        return;
-                                    }
-
-                                    // Disparamos la lógica de red sin frenar el render
-                                    Task.Run(() => onInputSubmitted(msg), token);
-                                }
-                            }
-                        }
-                        else if (key.Key == ConsoleKey.Escape) // Salir con Esc limpio
-                        {
-                            cts.Cancel();
-                            return; // Rompe el bucle de input, el RunAsync() principal lo detectará
-                        }
-                        else if (key.Key == ConsoleKey.UpArrow) { _scrollOffset++; }
-                        else if (key.Key == ConsoleKey.DownArrow) { _scrollOffset = Math.Max(0, _scrollOffset - 1); }
-                        else if (key.Key == ConsoleKey.End) { _scrollOffset = 0; }
-                        else if (key.Key == ConsoleKey.Backspace && _inputBuffer.Length > 0)
-                        {
-                            _inputBuffer = _inputBuffer[..^1];
-                            _scrollOffset = 0; // Si escribe o borra, lo llevamos al presente
-                        }
-                        else if (!char.IsControl(key.KeyChar))
-                        {
-                            _inputBuffer += key.KeyChar;
-                            _scrollOffset = 0; // Si escribe, lo llevamos al presente
-                        }
-                    }
-                    RequestRender();
-
-                    // Dormimos el hilo 7ms para no fundir el procesador
                     await Task.Delay(7, token);
                 }
             }
@@ -235,106 +239,157 @@ namespace TermFlow.Components.FullScreen
             StringBuilder buffer = new StringBuilder(4096);
             buffer.Append("\x1b[H"); // Mover el cursor arriba a la izquierda
 
-            List<string> visibleLines;
             string currentInput;
             int currentScroll;
 
-            // Extraemos una copia ultrarrápida del estado para no bloquear el hilo de red
+            // Extraemos una copia ultrarrápida del estado
             lock (_stateLock)
             {
                 currentInput = _inputBuffer;
 
-                // FIX: Cálculo elástico de filas soportando múltiples líneas reales (\n)
-                int inputRows = 0;
+                // --- CÁLCULO ELÁSTICO DE FILAS EXACTO ---
+                List<string> wrappedInputLines = new List<string>();
                 string[] inputLines = currentInput.Split('\n');
+                string[] promptParts = prompt.Split('\n');
+                string promptLastLine = promptParts[^1];
 
-                // La primera línea cuenta junto con el prompt de la consola
-                inputRows += Math.Max(1, (prompt + inputLines[0]).WrapText(width).Count);
+                // 1. Sumar las líneas del prompt anteriores al último \n
+                int promptTopRows = 0;
+                for (int i = 0; i < promptParts.Length - 1; i++)
+                    promptTopRows += Math.Max(1, promptParts[i].CountPhysicalLines(width));
+
+                // Las siguientes líneas se wrappean solas
                 for (int i = 1; i < inputLines.Length; i++)
                 {
-                    inputRows += Math.Max(1, inputLines[i].WrapText(width).Count);
+                    var wrapped = inputLines[i].WrapText(width);
+                    if (wrapped.Count == 0) wrapped.Add("");
+                    wrappedInputLines.AddRange(wrapped);
                 }
 
+                // 2. La primera línea del input se concatena con la última línea del prompt
+                var firstLineWrapped = (promptLastLine + inputLines[0]).WrapText(width);
+                if (firstLineWrapped.Count == 0) firstLineWrapped.Add("");
+                wrappedInputLines.AddRange(firstLineWrapped);
+
+                int inputRows = wrappedInputLines.Count + promptTopRows;
                 int logRowsAvailable = Math.Max(1, height - inputRows - 1);
 
-                // NUEVO: Limitar el scroll al tope máximo de líneas reales en el historial
+                // Limitar el scroll al tope máximo
                 int totalLogLines = 0;
                 foreach (var log in _logs)
-                {
-                    totalLogLines += log.WrapText(width).Count;
-                }
+                    totalLogLines += log.CountPhysicalLines(width);
 
-                int maxScroll = Math.Max(0, totalLogLines - logRowsAvailable);
-                if (_scrollOffset > maxScroll)
-                {
-                    _scrollOffset = maxScroll;
-                }
+                _maxScroll = Math.Max(0, totalLogLines - logRowsAvailable);
+                if (_scrollOffset > _maxScroll)
+                    _scrollOffset = _maxScroll;
 
-                // Si bajó al presente, apagamos la alerta ===
+                // Si bajó al presente, apagamos la alerta
                 if (_scrollOffset == 0)
-                {
                     _hasNewLogsBelow = false;
-                }
 
                 currentScroll = _scrollOffset;
-                visibleLines = GetVisibleLogLines(width, logRowsAvailable, currentScroll);
-            }
+                var visibleLines = GetVisibleLogLines(width, logRowsAvailable, currentScroll);
 
-            // 1. Dibujamos los logs
-            foreach (var line in visibleLines)
-            {
-                buffer.Append(line).Append("\x1b[K\n");
-            }
+                // 1. Dibujamos los logs
+                foreach (var line in visibleLines)
+                    buffer.Append(line).Append("\x1b[K\n");
 
-            // 2. Dibujamos la barra divisoria inteligente corregida
-            string dividerLine = new string(ConsoleGlyphs.Horizontal, width);
+                // 2. Dibujamos la barra divisoria inteligente
+                string dividerLine = new string(ConsoleGlyphs.Horizontal, width);
 
-            if (currentScroll > 0 && _hasNewLogsBelow)
-            {
-                // ALERTA: Hay mensajes nuevos reales sin leer abajo
-                string alertText = " [ ↓ MENSAJES NUEVOS ABAJO ] ";
-                if (width > alertText.Length + 6)
+                if (currentScroll > 0 && _hasNewLogsBelow)
                 {
-                    int sideLength = (width - alertText.Length) / 2;
-                    string sideBar = new string(ConsoleGlyphs.Horizontal, sideLength);
-                    buffer.Append($"{ThemeColors.Dim}{sideBar}{ThemeColors.Warning}{AnsiColor.Bold}{alertText}{ThemeColors.Reset}{ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, width - sideLength - alertText.Length)}{ThemeColors.Reset}\x1b[K\n");
+                    string alertText = " [ ↓ MENSAJES NUEVOS ABAJO ] ";
+                    if (width > alertText.Length + 6)
+                    {
+                        int sideLength = (width - alertText.Length) / 2;
+                        string sideBar = new string(ConsoleGlyphs.Horizontal, sideLength);
+                        buffer.Append($"{ThemeColors.Dim}{sideBar}{ThemeColors.Warning}{AnsiColor.Bold}{alertText}{ThemeColors.Reset}{ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, width - sideLength - alertText.Length)}{ThemeColors.Reset}\x1b[K\n");
+                    }
+                    else
+                        buffer.Append($"{ThemeColors.Warning}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
+                }
+                else if (currentScroll > 0)
+                {
+                    string historyText = $" [ MODO HISTORIAL: -{currentScroll} LÍNEAS ] ";
+                    if (width > historyText.Length + 6)
+                    {
+                        int sideLength = (width - historyText.Length) / 2;
+                        string sideBar = new string(ConsoleGlyphs.Horizontal, sideLength);
+                        buffer.Append($"{ThemeColors.Dim}{sideBar}{historyText}{new string(ConsoleGlyphs.Horizontal, width - sideLength - historyText.Length)}{ThemeColors.Reset}\x1b[K\n");
+                    }
+                    else
+                        buffer.Append($"{ThemeColors.Dim}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
                 }
                 else
-                {
-                    buffer.Append($"{ThemeColors.Warning}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
-                }
-            }
-            else if (currentScroll > 0)
-            {
-                // Modo lectura tranquilo: Estás arriba, pero nadie escribió nada nuevo
-                string historyText = $" [ MODO HISTORIAL: -{currentScroll} LÍNEAS ] ";
-                if (width > historyText.Length + 6)
-                {
-                    int sideLength = (width - historyText.Length) / 2;
-                    string sideBar = new string(ConsoleGlyphs.Horizontal, sideLength);
-                    buffer.Append($"{ThemeColors.Dim}{sideBar}{historyText}{new string(ConsoleGlyphs.Horizontal, width - sideLength - historyText.Length)}{ThemeColors.Reset}\x1b[K\n");
-                }
-                else
-                {
                     buffer.Append($"{ThemeColors.Dim}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
-                }
-            }
-            else
-            {
-                // Barra normal opaca (Estás en el presente)
-                buffer.Append($"{ThemeColors.Dim}{dividerLine}{ThemeColors.Reset}\x1b[K\n");
-            }
 
-            // 3. FIX: Dibujamos el prompt y el bloque multilínea del input limpiando renglón por renglón
-            buffer.Append(prompt);
-            string[] renderInputLines = currentInput.Split('\n');
-            for (int i = 0; i < renderInputLines.Length; i++)
-            {
-                buffer.Append(renderInputLines[i]).Append("\x1b[K");
-                if (i < renderInputLines.Length - 1)
+                // 3. Prompt + input (Se imprime tal cual)
+                buffer.Append("\x1b[K");
+                buffer.Append(prompt);
+                buffer.Append(currentInput);
+                buffer.Append("\x1b[J"); // Limpiar cualquier basura que quede debajo
+
+                // 4. Posicionar el cursor usando coordenadas ABSOLUTAS (Matemática 2D)
+                int promptLastLineLen = promptLastLine.GetVisualLength();
+                int absoluteVisualPos = promptLastLineLen + _cursorPos;
+
+                int targetLine = 0;
+                int targetCol = 1; // ANSI es 1-indexed
+                int remaining = absoluteVisualPos;
+                bool found = false;
+
+                for (int i = 0; i < wrappedInputLines.Count; i++)
                 {
-                    buffer.Append("\n");
+                    int lineLen = wrappedInputLines[i].GetVisualLength();
+
+                    if (remaining < lineLen)
+                    {
+                        targetLine = i;
+                        targetCol = remaining + 1;
+                        found = true;
+                        break;
+                    }
+                    else if (remaining == lineLen)
+                    {
+                        // El cursor cae EXACTAMENTE al final de una línea
+                        if (lineLen == width)
+                        {
+                            // Auto-wrap: salta a la siguiente línea, columna 1
+                            targetLine = i + 1;
+                            targetCol = 1;
+                        }
+                        else
+                        {
+                            // Salto de línea explícito (\n): se queda al final de esta línea
+                            targetLine = i;
+                            targetCol = remaining + 1;
+                        }
+                        found = true;
+                        break;
+                    }
+                    remaining -= lineLen;
                 }
+
+                // Seguridad: si se pasa del final del texto por algún desajuste
+                if (!found)
+                {
+                    targetLine = wrappedInputLines.Count - 1;
+                    targetCol = wrappedInputLines[^1].GetVisualLength() + 1;
+                }
+
+                // Calcular fila física real en la pantalla
+                int inputStartRow = logRowsAvailable + 2; // +1 por divider, +1 por base-1 de ANSI
+                int cursorRow = inputStartRow + targetLine + promptTopRows;
+
+                // FIX: Auto-wrap en el borde inferior de la pantalla
+                if (cursorRow > height)
+                {
+                    cursorRow = height;
+                    targetCol = 1;
+                }
+
+                buffer.Append($"\x1b[{cursorRow};{targetCol}H");
             }
 
             Console.Write(buffer.ToString());
@@ -364,22 +419,16 @@ namespace TermFlow.Components.FullScreen
                 for (int i = wrappedLines.Count - 1; i >= 0; i--)
                 {
                     if (linesSkipped < scrollOffset)
-                    {
                         linesSkipped++;
-                    }
                     else if (result.Count < maxLines)
-                    {
                         result.Add(wrappedLines[i]);
-                    }
                 }
                 currentLogIndex--;
             }
 
             // Rellenamos el espacio vacío superior si hay muy pocos logs
             while (result.Count < maxLines)
-            {
                 result.Add("");
-            }
 
             result.Reverse(); // Invertimos para que queden en orden cronológico correcto
             return result;
