@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 1R1an1 */
-using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace TermFlow.Core
 {
@@ -10,7 +10,7 @@ namespace TermFlow.Core
     /// Utilidades de extensión para manipular strings que contienen secuencias ANSI,
     /// calculando longitud visual, truncando y envolviendo texto sin romper los códigos de color.
     /// </summary>
-    internal static class AnsiStringHelper
+    public static class AnsiStringHelper
     {
         /// <summary>
         /// Elimina todos los códigos ANSI de un string.
@@ -20,7 +20,7 @@ namespace TermFlow.Core
         public static string StripAnsi(this string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
-            return System.Text.RegularExpressions.Regex.Replace(text, @"\x1b\[[^m]*m", "");
+            return Regex.Replace(text, @"\x1b\[[^m]*m", "");
         }
 
         /// <summary>
@@ -40,7 +40,7 @@ namespace TermFlow.Core
         /// <param name="text">Texto con posibles códigos ANSI</param>
         /// <param name="width">Ancho máximo en caracteres visuales</param>
         /// <returns>Lista de líneas envueltas con sus códigos ANSI conservados</returns>
-        public static List<string> WrapText(this string text, int width)
+        internal static List<string> WrapText(this string text, int width)
         {
             var result = new List<string>();
             if (width <= 0) { result.Add(text ?? ""); return result; }
@@ -108,7 +108,7 @@ namespace TermFlow.Core
         /// <param name="text">Texto a evaluar.</param>
         /// <param name="width">Ancho máximo en caracteres visuales.</param>
         /// <returns>Cantidad de líneas físicas resultantes.</returns>
-        public static int CountPhysicalLines(this string text, int width)
+        internal static int CountPhysicalLines(this string text, int width)
              => WrapText(text, width).Count;
 
         /// <summary>
@@ -117,7 +117,7 @@ namespace TermFlow.Core
         /// <param name="text">Texto original con posibles ANSI.</param>
         /// <param name="maxLength">Cantidad máxima de caracteres visibles a conservar.</param>
         /// <returns>Texto truncado manteniendo los códigos ANSI intactos.</returns>
-        public static string Truncate(this string text, int maxLength)
+        internal static string Truncate(this string text, int maxLength)
         {
             if (string.IsNullOrEmpty(text) || maxLength <= 0) return "";
 
@@ -152,7 +152,7 @@ namespace TermFlow.Core
         /// Parsea un string separando el texto visible de las secuencias ANSI.
         /// </summary>
         /// <returns>Una colección de tuplas (Texto, EsAnsi).</returns>
-        public static IEnumerable<(string Segment, bool IsAnsi)> ParseAnsi(this string text)
+        internal static IEnumerable<(string Segment, bool IsAnsi)> ParseAnsi(this string text)
         {
             if (string.IsNullOrEmpty(text)) yield break;
 
