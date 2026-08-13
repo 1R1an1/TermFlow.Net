@@ -45,10 +45,13 @@ namespace TermFlow.Components.FullScreen
                 int result = -1;
 
                 var router = new InputRouter(false)
-                    .BindCancel(() => { result = -1; _exit = true; })
-                    .BindConfirm(() => { if (filtered.Count > 0) { result = filtered[_cursor].OriginalIndex; _exit = true; } }, "elegir");
+                    .BindCancel(() => { result = -1; _exit = true; });
 
-                await RunSearchEngine(title, items, filtered, null, router, token, startIndex);
+                await RunSearchEngine(title, items, filtered, null, router, token, startIndex, () =>
+                {
+                    if (filtered.Count > 0)
+                        result = filtered[_cursor].OriginalIndex; _exit = true;
+                });
                 return result;
             }
             catch (OperationCanceledException) { return -1; }
@@ -84,11 +87,6 @@ namespace TermFlow.Components.FullScreen
 
                 var router = new InputRouter(false)
                     .BindCancel(() => { result = Array.Empty<int>(); _exit = true; })
-                    .BindConfirm(() =>
-                    {
-                        result = new int[selectedMap.Count];
-                        selectedMap.CopyTo(result); Array.Sort(result); _exit = true;
-                    })
                     .BindSelect(() =>
                     {
                         if (filtered.Count > 0)
@@ -99,7 +97,11 @@ namespace TermFlow.Components.FullScreen
                         }
                     });
 
-                await RunSearchEngine(title, items, filtered, selectedMap, router, token, startIndex);
+                await RunSearchEngine(title, items, filtered, selectedMap, router, token, startIndex, () =>
+                    {
+                        result = new int[selectedMap.Count];
+                        selectedMap.CopyTo(result); Array.Sort(result); _exit = true;
+                    });
                 return result;
             }
             catch (OperationCanceledException) { return Array.Empty<int>(); }
@@ -116,13 +118,14 @@ namespace TermFlow.Components.FullScreen
         /// <param name="router">Enrutador de input configurado.</param>
         /// <param name="token">Token de cancelación.</param>
         /// <param name="startIndex">Índice inicial del cursor.</param>
-        private static async Task RunSearchEngine(string title, string[] items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex)
+        private static async Task RunSearchEngine(string title, string[] items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex, Action OnConfirm)
         {
             ScrollState layout = new ScrollState();
             StringBuilder buffer = new StringBuilder(2048);
             bool shouldRender = true;
             Console.CursorVisible = true;
             var searchEdit = new LineEdit("  Buscar: » ", router);
+            router.BindConfirm(OnConfirm);
 
             _cursor = startIndex;
             _exit = false;
@@ -169,7 +172,11 @@ namespace TermFlow.Components.FullScreen
                 }
 
                 var inputEvent = InputReader.ReadInput();
-                if (inputEvent.Type != InputEventType.None) router.Handle(inputEvent);
+                if (inputEvent.Type != InputEventType.None)
+                {
+                    shouldRender = true;
+                    router.Handle(inputEvent);
+                }
                 await Task.Delay(15, token);
             }
             Console.CursorVisible = false;
