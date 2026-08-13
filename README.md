@@ -411,6 +411,7 @@ TermFlow.Net/
 │           └── TreeExplorer.VirtualDataSource.cs   # Implementación in-memory
 └── TermFlow.Demo/                      # Proyecto de demo interactivo (no es parte de la biblioteca)
     ├── TermFlow.Demo.csproj            # Referencia al csproj principal
+    ├── TermCanvasDemo.cs               # Demo para testear TermCanvas
     └── Program.cs                      # Menú de tests de todos los componentes
 ```
 

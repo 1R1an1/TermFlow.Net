@@ -27,6 +27,7 @@ internal class Program
         "TreeExplorer.ExploreMultiAsync — virtual",
         "LivePanel — panel de logs dinámico",
         "LiveConsole — Consola en estilo chat",
+        "Canvas - WIP",
         "Salir"
     ];
 
@@ -50,7 +51,7 @@ internal class Program
             }
             catch (Exception ex)
             {
-                TextViewer.Error($"Excepción durante el test: {ex.Message}");
+                TextViewer.Error($"Excepción durante el test, mensaje: \"{ex.Message}\", StackTrace:\n{ex.StackTrace}");
             }
 
             TextViewer.Info("Volviendo al menú principal...");
@@ -78,6 +79,7 @@ internal class Program
             case 11: await TestTreeMultiVirtual(); break;
             case 12: await TestLivePanel(); break;
             case 13: await TestLiveConsole(); break;
+            case 14: await TermCanvasDemo.Run(); break;
         }
     }
 
