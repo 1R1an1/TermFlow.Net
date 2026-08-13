@@ -140,9 +140,9 @@ TermFlow.Net se organiza en tres capas claramente separadas:
 │  └──────────────┘  └─────────────────────────┘  │
 ├─────────────────────────────────────────────────┤
 │                Core (Motor)                     │
-│  Engine · InputReader · InputRouter             │
+│  Engine · InputReader · InputRouter · TermCanvas│
 │  ScrollState · AnsiColor · AnsiStringHelper     │
-│  ThemeColors · ConsoleGlyphs                    │
+│  ThemeColors · ConsoleGlyphs · LineEdit         │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -312,11 +312,12 @@ await console.RunAsync(">>> ", async (input) =>
 | `InputReader`      | Lector de bajo nivel: decodifica teclas comunes y secuencias ANSI SGR del mouse (scroll up/down), filtrando clicks fantasma. |
 | `InputRouter`      | Enrutador fluent de teclas a acciones, con agrupación automática del footer contextual.                                      |
 | `ScrollState`      | Matemática de cursor + ventana de scroll, con detección automática de resize.                                                |
+| `TermCanvas`       | Motor de renderizado intermedio (Canvas Virtual) con Dirty Tracking, Thread-Safety y manejo optimizado de memoria.           |
 | `AnsiColor`        | Wrapper tipado para secuencias ANSI. Soporta composición con `+` y conversión implícita a `string`.                          |
 | `AnsiStringHelper` | Extensiones para envolver, truncar y medir strings respetando códigos ANSI.                                                  |
 | `ThemeColors`      | Paleta semántica central (`Success`, `Warning`, `Error`, `Info`, etc.). Modificable en runtime.                              |
 | `ConsoleGlyphs`    | Catálogo de glifos Unicode (`┌ ┐ └ ┘ ─ │ ✔ ⚠ ● ▶`). Modificable en runtime.                                                  |
-| `LineEdit`         | Logica de editor de línea que gestiona buffer, cursor y navegación. Es utilizado por TextInput.                              |
+| `LineEdit`         | Logica de editor de línea que gestiona buffer, cursor y navegación. Utilizado por TextInput, LiveConsole y SearchList.       |
 
 ---
 
@@ -385,6 +386,7 @@ TermFlow.Net/
 │   ├── InputReader.cs                  # Decoder de teclas + mouse SGR
 │   ├── InputRouter.cs                  # Binds fluent + footer contextual
 │   ├── ScrollState.cs                  # Matemática de scroll
+│   ├── TermCanvas.cs                   # Canvas Virtual
 │   ├── AnsiColor.cs                    # Wrapper de secuencias ANSI
 │   ├── AnsiStringHelper.cs             # Wrap/truncate/medida con ANSI
 │   ├── ThemeColors.cs                  # Paleta semántica

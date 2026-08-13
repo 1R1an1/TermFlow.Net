@@ -41,6 +41,7 @@ public class TermCanvas : IDisposable
     private int _width;
     private int _height;
     private bool _anyDirty = true;
+    private bool _forceClearScreen = false;
 
     /// <summary>
     /// Obtiene o establece la columna X (base 0) donde se posicionará el cursor real de la consola en el próximo <see cref="Flush"/>.
@@ -67,8 +68,8 @@ public class TermCanvas : IDisposable
     /// </summary>
     public int Height { get { lock (_syncLock) return _height; } }
 
-    private int _lastWidth;
-    private int _lastHeight;
+    private volatile int _lastWidth;
+    private volatile int _lastHeight;
     private CancellationTokenSource _resizeCts;
     private bool _automaticResize = false;
     private int _minDirtyY = int.MaxValue;
@@ -82,22 +83,22 @@ public class TermCanvas : IDisposable
     /// <param name="width">Ancho inicial del canvas.</param>
     /// <param name="height">Alto inicial del canvas.</param>
     public TermCanvas(int width, int height)
-        => Resize(width, height);
+        => Init(width, height);
 
     /// <summary>
     /// Inicializa una nueva instancia de <see cref="TermCanvas"/> con soporte opcional para redimensionamiento automático.
     /// </summary>
     /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
     /// <param name="resizeIntervalms">Intervalo en milisegundos para comprobar cambios de tamaño.</param>
-    /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño.</param>
-    public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Func<Task> onResize = null)
+    /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
+    public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Func<TermCanvas, Lock, Task> onResize = null)
     {
         _automaticResize = automaticResize;
         if (automaticResize)
         {
             _resizeCts = new CancellationTokenSource();
             _lastHeight = Console.WindowHeight; _lastWidth = Console.WindowWidth;
-            Resize(_lastWidth, _lastHeight);
+            Init(_lastWidth, _lastHeight);
             ThreadPool.QueueUserWorkItem(async _ =>
             {
                 try
@@ -107,12 +108,14 @@ public class TermCanvas : IDisposable
                         int width = Console.WindowWidth, height = Console.WindowHeight;
                         if (width != _lastWidth || height != _lastHeight)
                         {
-                            _lastWidth = width;
-                            _lastHeight = height;
-                            Resize(_lastWidth, _lastHeight);
-
+                            lock (_syncLock)
+                            {
+                                _lastWidth = width;
+                                _lastHeight = height;
+                                Resize(_lastWidth, _lastHeight);
+                            }
                             if (onResize is not null)
-                                await onResize.Invoke();
+                                await onResize.Invoke(this, _syncLock);
                         }
                         await Task.Delay(resizeIntervalms, _resizeCts.Token);
                     }
@@ -121,11 +124,12 @@ public class TermCanvas : IDisposable
             });
         }
         else
-            Resize(Console.WindowWidth, Console.WindowHeight);
+            Init(Console.WindowWidth, Console.WindowHeight);
     }
 
     /// <summary>
-    /// Redimensiona el canvas interno. Fuerza un redibujado completo en el próximo render.
+    /// Redimensiona el canvas interno borrando todo el contenido anterior.
+    /// Marca el flag <see cref="_forceClearScreen"/> para que el próximo <see cref="Flush"/> limpie la terminal.
     /// </summary>
     /// <param name="newWidth">Nuevo ancho.</param>
     /// <param name="newHeight">Nuevo alto.</param>
@@ -139,40 +143,79 @@ public class TermCanvas : IDisposable
             _height = newHeight;
             _buffer = new Cell[newWidth, newHeight];
             _dirty = new bool[newWidth, newHeight];
-            Clear(); // Marca todo como sucio para forzar el primer render
+            _forceClearScreen = true;
+            _anyDirty = false;
+            _minDirtyY = int.MaxValue;
+            _maxDirtyY = int.MinValue;
         }
     }
 
     /// <summary>
-    /// Limpia todo el canvas interno, marcando todas las celdas como sucias.
+    /// Inicializa los arrays del canvas. Aprovecha la inicialización por defecto de C# ('\0' y null) evitando bucles innecesarios.
+    /// </summary>
+    /// <param name="inicialWidth">Ancho inicial.</param>
+    /// <param name="inicialHeight">Alto inicial.</param>
+    private void Init(int inicialWidth, int inicialHeight)
+    {
+        lock (_syncLock)
+        {
+            if (_width == inicialWidth && _height == inicialHeight && _buffer != null) return;
+
+            _width = inicialWidth;
+            _height = inicialHeight;
+            _buffer = new Cell[inicialWidth, inicialHeight];
+            _dirty = new bool[inicialWidth, inicialHeight];
+            _forceClearScreen = true;
+        }
+    }
+
+    /// <summary>
+    /// Actualiza el valor de una celda individual. 
+    /// Si el carácter es un espacio y la celda ya estaba vacía ('\0' o ' '), no hace nada para evitar ensuciar la celda.
+    /// </summary>
+    /// <param name="x">Columna base 0.</param>
+    /// <param name="y">Fila base 0.</param>
+    /// <param name="c">Nuevo carácter.</param>
+    /// <param name="colorCode">Nuevo código de color ANSI. Se suele pasar <c>null</c> para limpiar.</param>
+    private void SetCell(int x, int y, char c, string colorCode)
+    {
+        ref Cell cell = ref _buffer[x, y];
+
+        // Solo actualizamos y marcamos como sucia si ALGO cambió realmente
+        if ((c == ' ' ? cell.Char != ' ' && cell.Char != '\0' : cell.Char != c) || cell.ColorCode != colorCode)
+        {
+            cell.Char = c;
+            cell.ColorCode = colorCode;
+            _dirty[x, y] = true;
+            _anyDirty = true;
+
+            // Actualizar los límites de filas sucias
+            if (y < _minDirtyY) _minDirtyY = y;
+            if (y > _maxDirtyY) _maxDirtyY = y;
+        }
+    }
+
+    /// <summary>
+    /// Limpia todo el canvas interno usando <see cref="Array.Clear"/>, reiniciando todo a '\0' y <c>null</c>.
+    /// Fuerza un borrado total de la pantalla en el próximo <see cref="Flush"/>.
     /// </summary>
     public void Clear()
     {
         lock (_syncLock)
         {
-            for (int y = 0; y < _height; y++)
-            {
-                for (int x = 0; x < _width; x++)
-                {
-                    if (_buffer[x, y].Char != ' ' || _buffer[x, y].ColorCode != ThemeColors.Reset)
-                    {
-                        _buffer[x, y].Char = ' ';
-                        _buffer[x, y].ColorCode = ThemeColors.Reset;
-                        _dirty[x, y] = true;
-                    }
-                }
-            }
-            _anyDirty = true;
+            Array.Clear(_buffer);
+            Array.Clear(_dirty);
 
-            // Forzamos a que escanee toda la pantalla en el próximo Flush
-            _minDirtyY = 0;
-            _maxDirtyY = _height - 1;
+            _anyDirty = false;
+            _forceClearScreen = true;
+            _minDirtyY = int.MaxValue;
+            _maxDirtyY = int.MinValue;
         }
     }
 
     /// <summary>
     /// Escribe texto en una posición específica con un color determinado.
-    /// Soporta secuencias ANSI (ej: \x1b[31m) dentro del string, aplicando el color 
+    /// Soporta secuencias ANSI (ej: \x1b[31m, <see cref="AnsiColor.Red"/>, <see cref="ThemeColors.Primary"/>) dentro del string, aplicando el color 
     /// a los caracteres subsiguientes sin romper el posicionamiento del cursor lógico.
     /// </summary>
     /// <param name="x">Columna base 0 donde empezar a escribir.</param>
@@ -187,7 +230,6 @@ public class TermCanvas : IDisposable
         {
             if (y < 0 || y >= _height) return;
 
-            bool madeDirty = false;
             string currentColorCode = color ?? ThemeColors.Reset;
             int currentX = x;
 
@@ -208,32 +250,16 @@ public class TermCanvas : IDisposable
                     foreach (char c in segment)
                     {
                         if (currentX >= 0 && currentX < _width)
-                        {
-                            ref Cell cell = ref _buffer[currentX, y];
-
-                            if (cell.Char != c || cell.ColorCode != currentColorCode)
-                            {
-                                cell.Char = c;
-                                cell.ColorCode = currentColorCode;
-                                _dirty[currentX, y] = true;
-                                madeDirty = true;
-
-                                // Actualizar los límites de filas sucias
-                                if (y < _minDirtyY) _minDirtyY = y;
-                                if (y > _maxDirtyY) _maxDirtyY = y;
-                            }
-                        }
+                            SetCell(currentX, y, c, currentColorCode);
                         currentX++; // Solo el cursor visible avanza
                     }
                 }
             }
-
-            if (madeDirty) _anyDirty = true;
         }
     }
 
     /// <summary>
-    /// Limpia una fila completa en el canvas.
+    /// Limpia una fila completa en el canvas poniendo espacios y color <c>null</c>.
     /// </summary>
     /// <param name="y">Fila base 0 a limpiar.</param>
     public void ClearLine(int y)
@@ -242,24 +268,15 @@ public class TermCanvas : IDisposable
         {
             if (y < 0 || y >= _height) return;
 
-            bool madeDirty = false;
             for (int x = 0; x < _width; x++)
-            {
-                if (_buffer[x, y].Char != ' ' || _buffer[x, y].ColorCode != ThemeColors.Reset)
-                {
-                    _buffer[x, y].Char = ' ';
-                    _buffer[x, y].ColorCode = ThemeColors.Reset;
-                    _dirty[x, y] = true;
-                    madeDirty = true;
-                }
-            }
-            if (madeDirty) _anyDirty = true;
+                SetCell(x, y, ' ', null);
         }
     }
 
     /// <summary>
     /// Renderiza en la consola real. Recorre la matriz y SÓLO mueve el cursor 
     /// y escribe donde haya bloques de caracteres que cambiaron (Dirty).
+    /// Si <see cref="_forceClearScreen"/> está activo, manda un ANSI Clear limpiando la consola entera antes de renderizar.
     /// </summary>
     public void Flush()
     {
@@ -267,86 +284,97 @@ public class TermCanvas : IDisposable
 
         lock (_syncLock)
         {
-            if (!_anyDirty) return;
+            if (!_anyDirty && !_forceClearScreen) return;
 
             var sb = new StringBuilder(4096);
-            string currentColorCode = ThemeColors.Reset;
-            int? cursorX = null;
-            int? cursorY = null;
 
-            // OPTIMIZACIÓN: Solo recorrer desde la primer fila sucia hasta la última
-            int startY = Math.Max(0, _minDirtyY);
-            int endY = Math.Min(_height - 1, _maxDirtyY);
-
-            for (int y = startY; y <= endY; y++)
+            // Si se pidió un Clear o Resize, mandamos el comando ANSI de borrar todo.
+            if (_forceClearScreen)
             {
-                for (int x = 0; x < _width; x++)
-                {
-                    if (_dirty[x, y])
-                    {
-                        // Obtenemos el color de la celda. Si está vacío, usamos reset.
-                        string cellColor = _buffer[x, y].ColorCode;
-                        if (string.IsNullOrEmpty(cellColor)) cellColor = ThemeColors.Reset;
-
-                        // Si no hay cursor seteado o veníamos de un salto, posicionamos
-                        if (cursorX == null || cursorY == null || cursorX != x || cursorY != y)
-                        {
-                            // ANSI es base 1, sumamos 1 a las coordenadas
-                            sb.Append($"\x1b[{y + 1};{x + 1}H");
-                            cursorX = x;
-                            cursorY = y;
-
-                            sb.Append(ThemeColors.Reset);
-                            sb.Append(cellColor);
-                            currentColorCode = cellColor;
-                        }
-                        else if (cellColor != currentColorCode)
-                        {
-                            sb.Append(cellColor);
-                            currentColorCode = cellColor;
-                        }
-
-                        // Escribimos el carácter
-                        sb.Append(_buffer[x, y].Char);
-
-                        // Avanzamos el cursor lógico un lugar
-                        cursorX++;
-
-                        // Limpiamos el flag dirty
-                        _dirty[x, y] = false;
-                    }
-                    else
-                        // Si la celda NO está sucia, rompemos la cadena de escritura.
-                        cursorX = null;
-                }
+                sb.Append("\x1b[2J\x1b[H"); // Borrar pantalla y mover cursor a 0,0
+                _forceClearScreen = false;
             }
 
-            if (sb.Length > 0)
-                sb.Append(ThemeColors.Reset);
+            if (_anyDirty)
+            {
+                string currentColorCode = ThemeColors.Reset;
+                int? cursorX = null;
+                int? cursorY = null;
+
+                int startY = Math.Max(0, _minDirtyY);
+                int endY = Math.Min(_height - 1, _maxDirtyY);
+
+                for (int y = startY; y <= endY; y++)
+                {
+                    for (int x = 0; x < _width; x++)
+                    {
+                        if (_dirty[x, y])
+                        {
+                            // Obtenemos el color de la celda. Si está vacío (null), usamos reset.
+                            string cellColor = _buffer[x, y].ColorCode;
+                            if (string.IsNullOrEmpty(cellColor)) cellColor = ThemeColors.Reset;
+
+                            // Si no hay cursor seteado o veníamos de un salto, posicionamos
+                            if (cursorX == null || cursorY == null || cursorX != x || cursorY != y)
+                            {
+                                // ANSI es base 1, sumamos 1 a las coordenadas
+                                sb.Append($"\x1b[{y + 1};{x + 1}H");
+                                cursorX = x;
+                                cursorY = y;
+
+                                sb.Append(ThemeColors.Reset);
+                                sb.Append(cellColor);
+                                currentColorCode = cellColor;
+                            }
+                            else if (cellColor != currentColorCode)
+                            {
+                                sb.Append(ThemeColors.Reset);
+                                sb.Append(cellColor);
+                                currentColorCode = cellColor;
+                            }
+
+                            // Escribimos el carácter
+                            sb.Append(_buffer[x, y].Char);
+
+                            // Avanzamos el cursor lógico un lugar
+                            cursorX++;
+
+                            // Limpiamos el flag dirty
+                            _dirty[x, y] = false;
+                        }
+                        else
+                            // Si la celda NO está sucia, rompemos la cadena de escritura.
+                            cursorX = null;
+                    }
+                }
+
+                if (sb.Length > 0)
+                    sb.Append(ThemeColors.Reset);
+
+                _anyDirty = false;
+
+                // Reseteamos los límites para el próximo frame
+                _minDirtyY = int.MaxValue;
+                _maxDirtyY = int.MinValue;
+            }
 
             // --- Lógica de Cursor Real ---
-            if (CursorVisible && CursorX.HasValue && CursorY.HasValue)
+            if (CursorVisible)
             {
-                sb.Append($"\x1b[{CursorY.Value + 1};{CursorX.Value + 1}H");
+                if (CursorX.HasValue && CursorY.HasValue)
+                    sb.Append($"\x1b[{CursorY.Value + 1};{CursorX.Value + 1}H");
                 sb.Append("\x1b[?25h"); // Mostrar cursor
             }
             else
                 sb.Append("\x1b[?25l"); // Ocultar cursor
-
             output = sb.Length > 0 ? sb.ToString() : null;
-            _anyDirty = false;
-
-            // Reseteamos los límites para el próximo frame
-            _minDirtyY = int.MaxValue;
-            _maxDirtyY = int.MinValue;
         }
-
         if (output != null)
             Console.Write(output);
     }
 
     /// <summary>
-    /// Limpia un área rectangular desde (x1, y1) hasta (x2, y2).
+    /// Limpia un área rectangular desde (x1, y1) hasta (x2, y2) poniendo espacios y color <c>null</c>.
     /// Solo marca como sucias las celdas que pasan de tener texto a estar vacías.
     /// </summary>
     /// <param name="x1">Columna inicial base 0.</param>
@@ -370,26 +398,9 @@ public class TermCanvas : IDisposable
             // Si las coordenadas quedaron fuera de rango, no hay nada que limpiar
             if (x1 > x2 || y1 > y2) return;
 
-            bool madeDirty = false;
-
             for (int y = y1; y <= y2; y++)
-            {
                 for (int x = x1; x <= x2; x++)
-                {
-                    ref Cell cell = ref _buffer[x, y];
-                    if (cell.Char != ' ' || cell.ColorCode != ThemeColors.Reset)
-                    {
-                        cell.Char = ' ';
-                        cell.ColorCode = ThemeColors.Reset;
-                        _dirty[x, y] = true;
-                        madeDirty = true;
-
-                        if (y < _minDirtyY) _minDirtyY = y;
-                        if (y < _maxDirtyY) _maxDirtyY = y;
-                    }
-                }
-            }
-            if (madeDirty) _anyDirty = true;
+                    SetCell(x, y, ' ', null);
         }
     }
 
@@ -398,33 +409,40 @@ public class TermCanvas : IDisposable
     /// </summary>
     /// <param name="x">Columna base 0 desde donde empezar a limpiar.</param>
     /// <param name="y">Fila base 0 a limpiar.</param>
-    /// <param name="length">Cantidad de caracteres a limpiar. Si es -1, limpia hasta el final de la fila.</param>
-    public void ClearLineFrom(int x, int y, int length = -1)
+    /// <param name="length">
+    /// Cantidad de caracteres a limpiar.
+    /// Si es mayor que 0, limpia exactamente esa cantidad de caracteres desde <paramref name="x"/>.
+    /// Si es 0, limpia desde <paramref name="x"/> hasta el final de la línea.
+    /// Si es menor que 0, limpia desde <paramref name="x"/> hasta el final de la línea,
+    /// dejando sin tocar los últimos <c>-length</c> caracteres.
+    /// </param>
+    public void ClearLineFrom(int x, int y, int length = 0)
     {
-        // Si length es -1, vamos hasta el final de la pantalla. Si no, calculamos el final.
-        int endX = length < 0 ? _width - 1 : x + length - 1;
+        int endX = length < 0 ? _width - -length - 1 : length == 0 ? _width - 1 : x + length - 1;
         ClearArea(x, y, endX, y);
     }
 
     /// <summary>
-    /// Escribe texto en una posición específica y luego limpia el resto de la línea 
-    /// desde el final del texto hasta el ancho especificado o el final de la consola.
+    /// Escribe texto en una posición específica y luego limpia el resto de la línea según el largo especificado.
     /// </summary>
     /// <param name="x">Columna base 0 donde empezar a escribir.</param>
     /// <param name="y">Fila base 0 donde escribir.</param>
     /// <param name="text">Texto a escribir (puede contener ANSI).</param>
     /// <param name="color">Color inicial por defecto.</param>
-    /// <param name="length">Largo de la zona a limpiar desde el final del texto. Si es -1, limpia hasta el final de la consola.</param>
-    public void WriteAtAndClear(int x, int y, string text, AnsiColor color = null, int length = -1)
+    /// <param name="length">
+    /// Cantidad de caracteres a limpiar desde el final del texto.
+    /// Si es mayor que 0, limpia exactamente esa cantidad.
+    /// Si es 0, limpia hasta el final de la línea.
+    /// Si es menor que 0, limpia hasta el final dejando sin tocar los últimos <c>-length</c> caracteres.
+    /// </param>
+    public void WriteAtAndClear(int x, int y, string text, AnsiColor color = null, int length = 0)
     {
         // 1. Escribimos el texto
         WriteAt(x, y, text, color);
-
         int visualLength = text?.GetVisualLength() ?? 0;
-        int clearLength = length < 0 ? -1 : length;
 
         // 2. Limpiamos la linea restante
-        ClearLineFrom(x + visualLength, y, clearLength);
+        ClearLineFrom(x + visualLength, y, length);
     }
 
     /// <summary>
