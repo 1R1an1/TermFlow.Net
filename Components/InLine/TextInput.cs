@@ -145,18 +145,20 @@ namespace TermFlow.Components.InLine
             if (isInputRunning) throw new InvalidOperationException("Ya hay un input corriendo");
             else isInputRunning = true;
 
-            string fullPrompt = $"{prompt} {AnsiColor.Cyan}[y/n]{ThemeColors.Reset} ";
+            string fullPrompt = $"{prompt} {ThemeColors.Info}[y/n]{ThemeColors.Reset} ";
             long? dynamicId = null;
             char currentChar = '\0';
             int promptLength = fullPrompt.GetVisualLength();
+            int fullPromptVisualLength = fullPrompt.Replace("\r", "").Replace("\n", "").GetVisualLength();
             bool? response = null;
             bool finished = false;
+            bool validCharDrawed = false;
 
             if (LivePanel.IsActive)
             {
                 dynamicId = LivePanel.AddDynamic(fullPrompt);
                 LivePanel.FocusEntryId = dynamicId;
-                LivePanel.FocusVisualCol = promptLength;
+                LivePanel.FocusVisualCol = fullPromptVisualLength;
             }
             else
             {
@@ -168,14 +170,21 @@ namespace TermFlow.Components.InLine
             {
                 if (LivePanel.IsActive)
                 {
-                    LivePanel.FocusVisualCol = promptLength + (currentChar != '\0' ? 1 : 0);
+                    LivePanel.FocusVisualCol = fullPromptVisualLength + (currentChar != '\0' ? 1 : 0);
                     LivePanel.UpdateLine(dynamicId.Value, fullPrompt + currentChar);
                 }
                 else
                 {
-                    Console.SetCursorPosition(promptLength, Console.CursorTop);
-                    Console.Write(currentChar + " ");
-                    Console.SetCursorPosition(promptLength + (currentChar != '\0' ? 1 : 0), Console.CursorTop);
+                    if (validCharDrawed)
+                        Console.Write("\b \b");
+
+                    if (currentChar != '\0')
+                    {
+                        Console.Write(currentChar);
+                        validCharDrawed = true;
+                    }
+                    else
+                        validCharDrawed = false;
                 }
             }
 
