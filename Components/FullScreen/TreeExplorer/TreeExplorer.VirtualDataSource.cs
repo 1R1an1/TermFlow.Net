@@ -21,16 +21,21 @@ public static partial class TreeExplorer
         /// <summary>Ruta virtual raíz (siempre comienza con "/").</summary>
         public string RootPath { get; }
 
+        /// <summary>Configuracion del explorador</summary>
+        public ExplorerOptions explorerOptions { get; }
+
         /// <summary>
         /// Construye la jerarquía virtual a partir de una colección de rutas.
         /// Las rutas pueden usar "/" o "\" como separador; se normalizan a "/".
         /// </summary>
         /// <param name="paths">Rutas virtuales a cargar.</param>
+        /// <param name="options">Configuracion del explorador.</param>
         /// <param name="virtualRoot">Nombre lógico a usar como raíz.</param>
-        public VirtualDataSource(IEnumerable<string> paths, string virtualRoot)
+        public VirtualDataSource(IEnumerable<string> paths, ExplorerOptions? options, string virtualRoot)
         {
             string cleanRoot = virtualRoot.Replace('\\', '/').Trim('/');
             RootPath = string.IsNullOrEmpty(cleanRoot) ? "/" : "/" + cleanRoot;
+            explorerOptions = options ?? new();
             _globalDirs.Add(RootPath);
 
             var structuralHierarchy = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
@@ -123,10 +128,12 @@ public static partial class TreeExplorer
             var resolved = new List<string>();
             foreach (var path in marked)
                 if (!_globalDirs.Contains(path))
+                {
                     if (filter != ExplorerFilter.OnlyFolders && IsPathMarked(path, marked, unmarkedExceptions, this))
                         resolved.Add(path);
-                    else
-                        TraverseVirtual(path, filter, marked, unmarkedExceptions, resolved);
+                }
+                else
+                    TraverseVirtual(path, filter, marked, unmarkedExceptions, resolved);
 
 
             return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();

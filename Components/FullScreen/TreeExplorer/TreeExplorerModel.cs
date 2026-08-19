@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 1R1an1 */
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -56,6 +57,9 @@ public interface IExplorerDataSource
     /// <summary>Ruta raíz del origen de datos.</summary>
     string RootPath { get; }
 
+    /// <summary>Configuracion del explorador</summary>
+    ExplorerOptions explorerOptions { get; }
+
     /// <summary>
     /// Indica si el ID dado corresponde a un directorio.
     /// </summary>
@@ -108,4 +112,45 @@ public interface IAsyncExplorerDataSource : IExplorerDataSource
     /// <param name="token">Token de cancelación.</param>
     /// <returns>Lista de entradas hijas ordenada.</returns>
     ValueTask<List<ExplorerEntry>> FetchAndSortEntriesAsync(string id, CancellationToken token);
+}
+
+/// <summary>
+/// Centraliza la configuración de navegación, filtros y restricciones para <see cref="TreeExplorer"/>.
+/// </summary>
+public readonly record struct ExplorerOptions
+{
+    /// <summary>
+    /// Filtro de tipo de entrada a incluir en el listado y selección.
+    /// Por defecto es <see cref="ExplorerFilter.All"/>.
+    /// </summary>
+    public readonly ExplorerFilter Filter { get; init; } = ExplorerFilter.All;
+
+    /// <summary>
+    /// Indica si se deben ignorar los enlaces simbólicos (symlinks) al listar entradas.
+    /// Solo tiene efecto en orígenes de datos físicos o personalizados que implementen esta distinción.
+    /// Por defecto es <c>true</c>.
+    /// </summary>
+    public readonly bool IgnoreSymlinks { get; init; } = true;
+
+    /// <summary>
+    /// Profundidad mínima a la que el usuario puede navegar hacia atrás.
+    /// El nivel 0 corresponde a la raíz. Si se establece en un valor mayor que 0,
+    /// el usuario no podrá retroceder por debajo de ese nivel.
+    /// Si es 0, no hay límite de retroceso.
+    /// </summary>
+    public readonly int MinDepth { get; init; } = 0;
+
+    /// <summary>
+    /// Conjunto de rutas a las que el usuario no puede acceder (entrar).
+    /// Si intenta entrar a una de estas rutas, se mostrará el mensaje "(Carpeta bloqueada)".
+    /// </summary>
+    public readonly HashSet<string> DeniedPaths { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Conjunto de rutas que directamente no aparecerán en el listado de entradas.
+    /// Útil para ocultar carpetas o archivos específicos del árbol visible.
+    /// </summary>
+    public readonly HashSet<string> HiddenPaths { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    public ExplorerOptions() { }
 }

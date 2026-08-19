@@ -18,11 +18,19 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             /// <summary>Ruta absoluta normalizada que actúa como raíz de la exploración.</summary>
             public string RootPath { get; }
 
+            /// <summary>Configuracion del explorador</summary>
+            public ExplorerOptions explorerOptions { get; }
+
             /// <summary>
             /// Crea el origen de datos físico.
             /// </summary>
             /// <param name="rootDir">Ruta raíz a explorar (se normaliza con <see cref="Path.GetFullPath"/>).</param>
-            public PhysicalDataSource(string rootDir) => RootPath = Path.GetFullPath(rootDir);
+            /// <param name="options">Configuracion del explorador</param>
+            public PhysicalDataSource(string rootDir, ExplorerOptions? options)
+            {
+                RootPath = Path.GetFullPath(rootDir);
+                explorerOptions = options ?? new();
+            }
 
             /// <summary>
             /// Indica si el ID corresponde a un directorio existente en disco.
@@ -48,7 +56,6 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
             /// <summary>
             /// Enumera el contenido del directorio indicado, ordenado por nombre.
-            /// Omite <see cref="FileAttributes.ReparsePoint"/> (symlinks) por seguridad.
             /// </summary>
             /// <param name="id">Ruta del directorio a enumerar.</param>
             /// <returns>Lista de entradas ordenada alfabéticamente (vacía si no existe o hay error de permisos).</returns>
@@ -61,7 +68,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                     if (!di.Exists) return list;
 
                     var infos = di.GetFileSystemInfos()
-                    .Where(i => (i.Attributes & FileAttributes.ReparsePoint) == 0)
+                    .Where(i => explorerOptions.IgnoreSymlinks ? i.LinkTarget is null : true)
                     .OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
                     foreach (var info in infos)
                     {
@@ -99,7 +106,6 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
             /// <summary>
             /// Recursión física que desciende por las carpetas marcadas recolectando archivos y subcarpetas.
-            /// Omite reparse points para no caer en loops de symlinks.
             /// </summary>
             /// <param name="dir">Carpeta a recorrer.</param>
             /// <param name="filter">Filtro de tipo de entrada.</param>
@@ -121,8 +127,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
                     foreach (var subDir in Directory.GetDirectories(dir))
                     {
-                        var attr = File.GetAttributes(subDir);
-                        if ((attr & FileAttributes.ReparsePoint) != 0)
+                        if (explorerOptions.IgnoreSymlinks ? new DirectoryInfo(subDir).LinkTarget is not null : false)
                             continue;
 
                         TraversePhysical(subDir, filter, marked, unmarkedExceptions, resolved);

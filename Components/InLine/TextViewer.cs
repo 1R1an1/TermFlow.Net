@@ -91,7 +91,6 @@ namespace TermFlow.Components.InLine
         /// <param name="title">Título del encabezado.</param>
         public static void WriteHeader(string title)
         {
-
             WriteToOutput(title);
             WriteToOutput($"{ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}");
         }
