@@ -127,10 +127,7 @@ public static class TermCanvasDemo
 
             canvas.CursorVisible = showCursor;
             if (setCursorPosition)
-            {
-                canvas.CursorY = inputY;
-                canvas.CursorX = 30 + (frame % 10);
-            }
+                canvas.CursorPos = (X: 30 + (frame % 10), Y: inputY);
 
             canvas.Flush();
             await Task.Delay(interval);
@@ -138,8 +135,7 @@ public static class TermCanvasDemo
 
         // Pantalla final
         canvas.Clear();
-        canvas.CursorX = null;
-        canvas.CursorY = null;
+        canvas.CursorPos = null;
         var finalText = " DEMO FINALIZADA CORRECTAMENTE ";
         int centerX = canvas.Width / 2 - finalText.Length / 2;
         int centerY = canvas.Height / 2;

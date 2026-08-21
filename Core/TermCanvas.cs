@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 1R1an1 */
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,16 +43,13 @@ public class TermCanvas : IDisposable
     private int _height;
     private bool _anyDirty = true;
     private bool _forceClearScreen = false;
+    private (int X, int Y)? _pendingClearScreen = null; // Guarda la Y para el \x1b[J
+    private readonly Dictionary<int, int> _pendingClearLineX = new(); // Y -> X para el \x1b[K
 
     /// <summary>
-    /// Obtiene o establece la columna X (base 0) donde se posicionará el cursor real de la consola en el próximo <see cref="Flush"/>.
+    /// Obtiene o establece donde se posicionará el cursor real (base 0) de la consola en el próximo <see cref="Flush"/>.
     /// </summary>
-    public int? CursorX { get; set; } = null;
-
-    /// <summary>
-    /// Obtiene o establece la fila Y (base 0) donde se posicionará el cursor real de la consola en el próximo <see cref="Flush"/>.
-    /// </summary>
-    public int? CursorY { get; set; } = null;
+    public (int X, int Y)? CursorPos { get; set; } = null;
 
     /// <summary>
     /// Obtiene o establece un valor que indica si el cursor real de la consola debe ser visible.
@@ -177,22 +175,27 @@ public class TermCanvas : IDisposable
     /// <param name="y">Fila base 0.</param>
     /// <param name="c">Nuevo carácter.</param>
     /// <param name="colorCode">Nuevo código de color ANSI. Se suele pasar <c>null</c> para limpiar.</param>
-    private void SetCell(int x, int y, char c, string colorCode)
+    private void SetCell(int x, int y, char c, string colorCode, bool? forceDirty = null)
     {
-        ref Cell cell = ref _buffer[x, y];
+        Cell cell = _buffer[x, y];
 
         // Solo actualizamos y marcamos como sucia si ALGO cambió realmente
         if ((c == ' ' ? cell.Char != ' ' && cell.Char != '\0' : cell.Char != c) || cell.ColorCode != colorCode)
         {
-            cell.Char = c;
-            cell.ColorCode = colorCode;
-            _dirty[x, y] = true;
+            SetCell(x, y, c, colorCode, forceDirty.HasValue ? forceDirty.Value : true);
             _anyDirty = true;
 
             // Actualizar los límites de filas sucias
             if (y < _minDirtyY) _minDirtyY = y;
             if (y > _maxDirtyY) _maxDirtyY = y;
         }
+    }
+    /// <summary>Modifica la celda posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
+    private void SetCell(int x, int y, char c, string colorCode, bool dirty)
+    {
+        _buffer[x, y].Char = c;
+        _buffer[x, y].ColorCode = colorCode;
+        _dirty[x, y] = dirty;
     }
 
     /// <summary>
@@ -268,8 +271,12 @@ public class TermCanvas : IDisposable
         {
             if (y < 0 || y >= _height) return;
 
+            // Actualizamos el buffer interno para que se sepa que está vacío
             for (int x = 0; x < _width; x++)
-                SetCell(x, y, ' ', null);
+            {
+                SetCell(x, y, '\0', null, forceDirty: false);
+                _pendingClearLineX[y] = 0;
+            }
         }
     }
 
@@ -302,10 +309,26 @@ public class TermCanvas : IDisposable
                 int? cursorY = null;
 
                 int startY = Math.Max(0, _minDirtyY);
+                if (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y < startY)
+                    startY = _pendingClearScreen.Value.Y;
                 int endY = Math.Min(_height - 1, _maxDirtyY);
 
                 for (int y = startY; y <= endY; y++)
                 {
+                    // --- INYECCIÓN DEL COMANDO \x1b[J ---
+                    if (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y == y)
+                    {
+                        // Posicionamos el cursor en (X, Y) y mandamos el ANSI J
+                        sb.Append($"\x1b[{y + 1};{_pendingClearScreen.Value.X + 1}H\x1b[J");
+                        _pendingClearScreen = null;
+                    }
+                    // --- INYECCIÓN DEL COMANDO \x1b[K (Si lo hubiera para esta línea) ---
+                    if (_pendingClearLineX.TryGetValue(y, out int clearX))
+                    {
+                        sb.Append($"\x1b[{y + 1};{clearX + 1}H\x1b[K");
+                        _pendingClearLineX.Remove(y);
+                    }
+
                     for (int x = 0; x < _width; x++)
                     {
                         if (_dirty[x, y])
@@ -347,6 +370,8 @@ public class TermCanvas : IDisposable
                             cursorX = null;
                     }
                 }
+                // Limpiamos cualquier comando de línea que haya quedado fuera del rango startY-endY
+                _pendingClearLineX.Clear();
 
                 if (sb.Length > 0)
                     sb.Append(ThemeColors.Reset);
@@ -361,8 +386,8 @@ public class TermCanvas : IDisposable
             // --- Lógica de Cursor Real ---
             if (CursorVisible)
             {
-                if (CursorX.HasValue && CursorY.HasValue)
-                    sb.Append($"\x1b[{CursorY.Value + 1};{CursorX.Value + 1}H");
+                if (CursorPos.HasValue)
+                    sb.Append($"\x1b[{CursorPos.Value.Y + 1};{CursorPos.Value.X + 1}H");
                 sb.Append("\x1b[?25h"); // Mostrar cursor
             }
             else
@@ -398,9 +423,21 @@ public class TermCanvas : IDisposable
             // Si las coordenadas quedaron fuera de rango, no hay nada que limpiar
             if (x1 > x2 || y1 > y2) return;
 
-            for (int y = y1; y <= y2; y++)
-                for (int x = x1; x <= x2; x++)
-                    SetCell(x, y, ' ', null);
+            // OPTIMIZACIÓN: Si el área cubre todo el ancho de la consola, usamos \x1b[K
+            if (x1 == 0 && x2 == _width - 1)
+            {
+                for (int y = y1; y <= y2; y++)
+                {
+                    for (int x = 0; x < _width; x++)
+                        SetCell(x, y, '\0', null, forceDirty: false);
+
+                    _pendingClearLineX[y] = 0;
+                }
+            }
+            else
+                for (int y = y1; y <= y2; y++)
+                    for (int x = x1; x <= x2; x++)
+                        SetCell(x, y, ' ', null);
         }
     }
 
@@ -418,8 +455,46 @@ public class TermCanvas : IDisposable
     /// </param>
     public void ClearLineFrom(int x, int y, int length = 0)
     {
-        int endX = length < 0 ? _width - -length - 1 : length == 0 ? _width - 1 : x + length - 1;
-        ClearArea(x, y, endX, y);
+        lock (_syncLock)
+        {
+            if (y < 0 || y >= _height || x < 0) return;
+            if (length == 0)
+            {
+                for (int i = x; i < _width; i++)
+                {
+                    SetCell(i, y, '\0', null, forceDirty: false);
+                    _pendingClearLineX[y] = x;
+                }
+            }
+            else
+            {
+                int endX = length < 0 ? _width - -length - 1 : x + length - 1;
+                if (endX >= x) ClearArea(x, y, endX, y);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Limpia desde una posición (x, y) hasta el final de la consola (equivalente a \x1b[J).
+    /// Programa el comando ANSI para ejecutarse en el próximo Flush.
+    /// </summary>
+    /// <param name="x">Columna base 0.</param>
+    /// <param name="y">Fila base 0.</param>
+    public void ClearFromPoint(int x, int y)
+    {
+        lock (_syncLock)
+        {
+            if (y < 0 || y >= _height || x < 0 || x >= _width) return;
+
+            // Actualizamos el buffer interno a vacío, pero NO lo ensuciamos 
+            // porque el comando ANSI físico se encargará de borrarlo en la terminal.
+            for (int j = y; j < _height; j++)
+                for (int i = (j == y) ? x : 0; i < _width; i++)
+                    SetCell(i, j, '\0', null, forceDirty: false);
+
+            // Guardamos la coordenada para que el Flush mande el \x1b[J
+            _pendingClearScreen = (x, y);
+        }
     }
 
     /// <summary>
