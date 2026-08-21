@@ -36,7 +36,8 @@ public class TermCanvas : IDisposable
         public string ColorCode;
     }
 
-    private Cell[,] _buffer;
+    private Cell[,] _buffer;       // Back  Buffer: lo que queremos dibujar
+    private Cell[,] _frontBuffer;  // Front Buffer: lo que la terminal realmente tiene ahora
     private bool[,] _dirty;
 
     private int _width;
@@ -139,6 +140,7 @@ public class TermCanvas : IDisposable
 
             _width = newWidth;
             _height = newHeight;
+            _frontBuffer = new Cell[newWidth, newHeight];
             _buffer = new Cell[newWidth, newHeight];
             _dirty = new bool[newWidth, newHeight];
             _forceClearScreen = true;
@@ -161,6 +163,7 @@ public class TermCanvas : IDisposable
 
             _width = inicialWidth;
             _height = inicialHeight;
+            _frontBuffer = new Cell[inicialWidth, inicialHeight];
             _buffer = new Cell[inicialWidth, inicialHeight];
             _dirty = new bool[inicialWidth, inicialHeight];
             _forceClearScreen = true;
@@ -169,26 +172,30 @@ public class TermCanvas : IDisposable
 
     /// <summary>
     /// Actualiza el valor de una celda individual. 
+    /// Compara contra el Front Buffer para saber si cambió respecto a la consola real.
     /// Si el carácter es un espacio y la celda ya estaba vacía ('\0' o ' '), no hace nada para evitar ensuciar la celda.
     /// </summary>
     /// <param name="x">Columna base 0.</param>
     /// <param name="y">Fila base 0.</param>
     /// <param name="c">Nuevo carácter.</param>
     /// <param name="colorCode">Nuevo código de color ANSI. Se suele pasar <c>null</c> para limpiar.</param>
+    /// <param name="forceDirty">Si no es <c>null</c>, fuerza el estado de suciedad de la celda al valor indicado.</param>
     private void SetCell(int x, int y, char c, string colorCode, bool? forceDirty = null)
     {
-        Cell cell = _buffer[x, y];
+        Cell front = _frontBuffer[x, y];
 
-        // Solo actualizamos y marcamos como sucia si ALGO cambió realmente
-        if ((c == ' ' ? cell.Char != ' ' && cell.Char != '\0' : cell.Char != c) || cell.ColorCode != colorCode)
+        // Solo actualizamos y marcamos como sucia si ALGO cambió realmente respecto a la consola real
+        if ((c == ' ' ? front.Char != ' ' && front.Char != '\0' : front.Char != c) || front.ColorCode != colorCode)
         {
-            SetCell(x, y, c, colorCode, forceDirty.HasValue ? forceDirty.Value : true);
+            SetCell(x, y, c, colorCode, dirty: forceDirty.HasValue ? forceDirty.Value : true);
             _anyDirty = true;
 
             // Actualizar los límites de filas sucias
             if (y < _minDirtyY) _minDirtyY = y;
             if (y > _maxDirtyY) _maxDirtyY = y;
         }
+        else if (_buffer[x, y] is var cell && (c == ' ' ? cell.Char != ' ' && cell.Char != '\0' : cell.Char != c) || cell.ColorCode != colorCode)
+            SetCell(x, y, c, colorCode, dirty: false);
     }
     /// <summary>Modifica la celda posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
     private void SetCell(int x, int y, char c, string colorCode, bool dirty)
@@ -196,6 +203,20 @@ public class TermCanvas : IDisposable
         _buffer[x, y].Char = c;
         _buffer[x, y].ColorCode = colorCode;
         _dirty[x, y] = dirty;
+    }
+
+    /// <summary>Modifica la celda fisica posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
+    private void SetFront(int x, int y, char c, string colorCode)
+    {
+        _frontBuffer[x, y].Char = c;
+        _frontBuffer[x, y].ColorCode = colorCode;
+    }
+
+    /// <summary>Modifica la celda virtual y la celda fisica posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
+    private void SetAll(int x, int y, char c, string colorCode, bool? forceDirty = null)
+    {
+        SetCell(x, y, c, colorCode, forceDirty);
+        SetFront(x, y, c, colorCode);
     }
 
     /// <summary>
@@ -206,6 +227,7 @@ public class TermCanvas : IDisposable
     {
         lock (_syncLock)
         {
+            Array.Clear(_frontBuffer);
             Array.Clear(_buffer);
             Array.Clear(_dirty);
 
@@ -274,7 +296,7 @@ public class TermCanvas : IDisposable
             // Actualizamos el buffer interno para que se sepa que está vacío
             for (int x = 0; x < _width; x++)
             {
-                SetCell(x, y, '\0', null, forceDirty: false);
+                SetAll(x, y, '\0', null, forceDirty: false);
                 _pendingClearLineX[y] = 0;
             }
         }
@@ -356,8 +378,9 @@ public class TermCanvas : IDisposable
                                 currentColorCode = cellColor;
                             }
 
-                            // Escribimos el carácter
+                            // Escribimos el carácter y lo guardamos en _frontBuffer
                             sb.Append(_buffer[x, y].Char);
+                            SetFront(x, y, _buffer[x, y].Char, _buffer[x, y].ColorCode);
 
                             // Avanzamos el cursor lógico un lugar
                             cursorX++;
@@ -429,7 +452,7 @@ public class TermCanvas : IDisposable
                 for (int y = y1; y <= y2; y++)
                 {
                     for (int x = 0; x < _width; x++)
-                        SetCell(x, y, '\0', null, forceDirty: false);
+                        SetAll(x, y, '\0', null, forceDirty: false);
 
                     _pendingClearLineX[y] = 0;
                 }
@@ -462,7 +485,7 @@ public class TermCanvas : IDisposable
             {
                 for (int i = x; i < _width; i++)
                 {
-                    SetCell(i, y, '\0', null, forceDirty: false);
+                    SetAll(i, y, '\0', null, forceDirty: false);
                     _pendingClearLineX[y] = x;
                 }
             }
@@ -490,7 +513,7 @@ public class TermCanvas : IDisposable
             // porque el comando ANSI físico se encargará de borrarlo en la terminal.
             for (int j = y; j < _height; j++)
                 for (int i = (j == y) ? x : 0; i < _width; i++)
-                    SetCell(i, j, '\0', null, forceDirty: false);
+                    SetAll(i, j, '\0', null, forceDirty: false);
 
             // Guardamos la coordenada para que el Flush mande el \x1b[J
             _pendingClearScreen = (x, y);
