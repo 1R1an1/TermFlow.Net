@@ -2,6 +2,7 @@
  * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -90,6 +91,7 @@ public class TermCanvas : IDisposable
     /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
     /// <param name="resizeIntervalms">Intervalo en milisegundos para comprobar cambios de tamaño.</param>
     /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
+    [OverloadResolutionPriority(0)]
     public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Func<TermCanvas, Lock, Task> onResize = null)
     {
         _automaticResize = automaticResize;
@@ -125,6 +127,16 @@ public class TermCanvas : IDisposable
         else
             Init(Console.WindowWidth, Console.WindowHeight);
     }
+
+    /// <summary>
+    /// Inicializa una nueva instancia de <see cref="TermCanvas"/> con soporte opcional para redimensionamiento automático.
+    /// </summary>
+    /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
+    /// <param name="resizeIntervalms">Intervalo en milisegundos para comprobar cambios de tamaño.</param>
+    /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
+    [OverloadResolutionPriority(1)]
+    public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Action<TermCanvas, Lock> onResize = null)
+        : this(automaticResize, resizeIntervalms, (tc, lc) => { onResize?.Invoke(tc, lc); return Task.CompletedTask; }) { }
 
     /// <summary>
     /// Redimensiona el canvas interno borrando todo el contenido anterior.

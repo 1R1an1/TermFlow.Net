@@ -274,7 +274,7 @@ internal class Program
             LivePanel.UpdateLine(dyn, TextViewer.SuccessF($"{ThemeColors.Bright}Trabajo completado."));
             LivePanel.UpdateDecorations(dyn, suffix: ThemeColors.Reset);
             TextViewer.Success("Panel terminado — todo OK.");
-            TextInput.PressToContinue("Presioná Enter para cerrar el panel");
+            TextInput.PressToContinue("[Presioná Enter para cerrar el panel]");
         }
         finally
         {
