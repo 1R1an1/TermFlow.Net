@@ -37,6 +37,7 @@ TermFlow.Net te permite construir desde simples barras de progreso hasta aplicac
     - [`LivePanel`](#livepanel)
     - [`LiveConsole`](#liveconsole)
   - [Motor Core](#motor-core)
+  - [Base](#base)
   - [Sistema de temas y glifos](#sistema-de-temas-y-glifos)
   - [Atajos de teclado](#atajos-de-teclado)
   - [Estructura del proyecto](#estructura-del-proyecto)
@@ -129,7 +130,7 @@ Aparece un menú full-screen desde donde podés elegir qué componente probar (T
 
 ## Arquitectura
 
-TermFlow.Net se organiza en tres capas claramente separadas:
+TermFlow.Net se organiza en cuatro capas separadas:
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -139,14 +140,18 @@ TermFlow.Net se organiza en tres capas claramente separadas:
 │  │  (fluido)    │  │ (alternate screen buf)  │  │
 │  └──────────────┘  └─────────────────────────┘  │
 ├─────────────────────────────────────────────────┤
+│                      Base                       │
+│        TermCanvas · LineEdit · InputRouter      │
+├─────────────────────────────────────────────────┤
 │                Core (Motor)                     │
-│  Engine · InputReader · InputRouter · TermCanvas│
-│  ScrollState · AnsiColor · AnsiStringHelper     │
-│  ThemeColors · ConsoleGlyphs · LineEdit         │
+│   Engine · InputReader · ScrollState            │
+│   AnsiColor · AnsiStringHelper                  │
+│   ThemeColors · ConsoleGlyphs                   │
 └─────────────────────────────────────────────────┘
 ```
 
 - **Core**: primitivas de bajo nivel (ANSI, lectura de input, matemática de scroll, helpers de strings con ANSI, tema central).
+- **Base**: logica reutilizable construida sobre `Core` (canvas virtual, editor de línea, enrutador de teclas, etc).
 - **Components/InLine**: componentes que se imprimen en el flujo normal de la consola, sin tomar el control total.
 - **Components/FullScreen**: componentes que entran al alternate buffer y toman control de toda la pantalla.
 
@@ -310,14 +315,23 @@ await console.RunAsync(">>> ", async (input) =>
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `Engine`           | Inicializa UTF-8, ANSI nativo en Windows, y gestiona la entrada/salida del alternate buffer.                                 |
 | `InputReader`      | Lector de bajo nivel: decodifica teclas comunes y secuencias ANSI SGR del mouse (scroll up/down), filtrando clicks fantasma. |
-| `InputRouter`      | Enrutador fluent de teclas a acciones, con agrupación automática del footer contextual.                                      |
 | `ScrollState`      | Matemática de cursor + ventana de scroll, con detección automática de resize.                                                |
-| `TermCanvas`       | Motor de renderizado intermedio (Canvas Virtual) con Dirty Tracking, Thread-Safety y manejo optimizado de memoria.           |
 | `AnsiColor`        | Wrapper tipado para secuencias ANSI. Soporta composición con `+` y conversión implícita a `string`.                          |
 | `AnsiStringHelper` | Extensiones para envolver, truncar y medir strings respetando códigos ANSI.                                                  |
 | `ThemeColors`      | Paleta semántica central (`Success`, `Warning`, `Error`, `Info`, etc.). Modificable en runtime.                              |
 | `ConsoleGlyphs`    | Catálogo de glifos Unicode (`┌ ┐ └ ┘ ─ │ ✔ ⚠ ● ▶`). Modificable en runtime.                                                  |
-| `LineEdit`         | Logica de editor de línea que gestiona buffer, cursor y navegación. Utilizado por TextInput, LiveConsole y SearchList.       |
+
+---
+
+## Base
+
+Capa intermedia entre `Core` y `Components`. Piezas reutilizables construidas sobre las primitivas de `Core`.
+
+| Clase         | Responsabilidad                                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `TermCanvas`  | Motor de renderizado intermedio (Canvas Virtual) con Dirty Tracking, Thread-Safety y manejo optimizado de memoria.           |
+| `LineEdit`    | Lógica de editor de línea que gestiona buffer, cursor y navegación. Utilizado por `TextInput`, `LiveConsole` y `SearchList`. |
+| `InputRouter` | Enrutador fluent de teclas a acciones, con agrupación automática del footer contextual.                                      |
 
 ---
 
@@ -384,14 +398,15 @@ TermFlow.Net/
 ├── Core/
 │   ├── Engine.cs                       # Setup ANSI/UTF-8 + alternate buffer
 │   ├── InputReader.cs                  # Decoder de teclas + mouse SGR
-│   ├── InputRouter.cs                  # Binds fluent + footer contextual
 │   ├── ScrollState.cs                  # Matemática de scroll
-│   ├── TermCanvas.cs                   # Canvas Virtual
 │   ├── AnsiColor.cs                    # Wrapper de secuencias ANSI
 │   ├── AnsiStringHelper.cs             # Wrap/truncate/medida con ANSI
 │   ├── ThemeColors.cs                  # Paleta semántica
-│   ├── ConsoleGlyphs.cs                # Glifos Unicode
-│   └── LineEdit.cs                     # Logica de editor de línea
+│   └── ConsoleGlyphs.cs                # Glifos Unicode
+├── Base/
+│   ├── TermCanvas.cs                   # Canvas Virtual con Dirty Tracking
+│   ├── LineEdit.cs                     # Logica de editor de línea (buffer + cursor)
+│   └── InputRouter.cs                  # Binds fluent + footer contextual
 ├── Components/
 │   ├── InLine/
 │   │   ├── TextViewer.cs               # Info/Success/Warn/Error/Figlet

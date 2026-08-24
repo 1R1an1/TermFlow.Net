@@ -3,7 +3,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using TermFlow.Components.Core;
+using TermFlow.Base;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 

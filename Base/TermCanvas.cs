@@ -6,8 +6,9 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Core;
 
-namespace TermFlow.Core;
+namespace TermFlow.Base;
 
 /// <summary>
 /// Motor de renderizado intermedio (Canvas Virtual) para consola.

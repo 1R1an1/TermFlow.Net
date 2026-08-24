@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using TermFlow.Base;
 using TermFlow.Core;
 
 namespace TermFlow.Demo;

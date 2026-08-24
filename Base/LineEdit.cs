@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
-namespace TermFlow.Components.Core
+namespace TermFlow.Base
 {
     /// <summary>
     /// Editor de línea interactivo para entrada de texto en consola.

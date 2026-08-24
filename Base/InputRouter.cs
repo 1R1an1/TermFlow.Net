@@ -3,8 +3,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using TermFlow.Core;
 
-namespace TermFlow.Core
+namespace TermFlow.Base
 {
     /// <summary>
     /// Motor de enrutamiento y unificación de entrada para TermFlow.

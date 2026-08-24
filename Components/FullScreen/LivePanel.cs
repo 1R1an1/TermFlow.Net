@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using TermFlow.Components.Core;
+using TermFlow.Base;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen

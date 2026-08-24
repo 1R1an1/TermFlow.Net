@@ -51,6 +51,7 @@ internal class Program
             }
             catch (Exception ex)
             {
+                Engine.ExitFullScreen(true);
                 TextViewer.Error($"Excepción durante el test, mensaje: \"{ex.Message}\", StackTrace:\n{ex.StackTrace}");
             }
 
