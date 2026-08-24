@@ -69,8 +69,6 @@ public class TermCanvas : IDisposable
     /// </summary>
     public int Height { get { lock (_syncLock) return _height; } }
 
-    private volatile int _lastWidth;
-    private volatile int _lastHeight;
     private CancellationTokenSource _resizeCts;
     private bool _automaticResize = false;
     private int _minDirtyY = int.MaxValue;
@@ -91,11 +89,12 @@ public class TermCanvas : IDisposable
     /// Inicializa una nueva instancia de <see cref="TermCanvas"/> con soporte opcional para redimensionamiento automático.
     /// </summary>
     /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
+    /// <param name="resizeCanvas">Si es <c>true</c>, el canvas de va a redimencionar si <paramref name="automaticResize"/> este activo, en caso contrario no se redimenciona.</param>
     /// <param name="resizeIntervalms">Intervalo en milisegundos para comprobar cambios de tamaño.</param>
     /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
     /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="resizeIntervalms"/> es menor o igual a 0.</exception>
     [OverloadResolutionPriority(0)]
-    public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Func<TermCanvas, Lock, Task> onResize = null)
+    public TermCanvas(bool automaticResize = false, bool resizeCanvas = true, int resizeIntervalms = 250, Func<TermCanvas, Lock, Task> onResize = null)
     {
         if (resizeIntervalms <= 0) throw new ArgumentOutOfRangeException(nameof(resizeIntervalms), "El intervalo debe ser mayor a 0.");
 
@@ -103,7 +102,7 @@ public class TermCanvas : IDisposable
         if (automaticResize)
         {
             _resizeCts = new CancellationTokenSource();
-            _lastHeight = Console.WindowHeight; _lastWidth = Console.WindowWidth;
+            int _lastHeight = Console.WindowHeight; int _lastWidth = Console.WindowWidth;
             Init(_lastWidth, _lastHeight);
             ThreadPool.QueueUserWorkItem(async _ =>
             {
@@ -118,7 +117,8 @@ public class TermCanvas : IDisposable
                             {
                                 _lastWidth = width;
                                 _lastHeight = height;
-                                Resize(_lastWidth, _lastHeight);
+                                if (resizeCanvas)
+                                    Resize(_lastWidth, _lastHeight);
                             }
                             if (onResize is not null)
                                 await onResize.Invoke(this, _syncLock);
@@ -137,12 +137,13 @@ public class TermCanvas : IDisposable
     /// Inicializa una nueva instancia de <see cref="TermCanvas"/> con soporte opcional para redimensionamiento automático.
     /// </summary>
     /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
+    /// <param name="resizeCanvas">Si es <c>true</c>, el canvas de va a redimencionar si <paramref name="automaticResize"/> este activo, en caso contrario no se redimenciona.</param>
     /// <param name="resizeIntervalms">Intervalo en milisegundos para comprobar cambios de tamaño.</param>
     /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
     /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="resizeIntervalms"/> es menor o igual a 0.</exception>
     [OverloadResolutionPriority(1)]
-    public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Action<TermCanvas, Lock> onResize = null)
-        : this(automaticResize, resizeIntervalms, (tc, lc) => { onResize?.Invoke(tc, lc); return Task.CompletedTask; }) { }
+    public TermCanvas(bool automaticResize = false, bool resizeCanvas = true, int resizeIntervalms = 250, Action<TermCanvas, Lock> onResize = null)
+        : this(automaticResize, resizeCanvas, resizeIntervalms, (tc, lc) => { onResize?.Invoke(tc, lc); return Task.CompletedTask; }) { }
 
     /// <summary>
     /// Redimensiona el canvas interno borrando todo el contenido anterior.
@@ -231,17 +232,20 @@ public class TermCanvas : IDisposable
     }
 
     /// <summary>Modifica la celda fisica posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
-    private void SetFront(int x, int y, char c, string colorCode)
+    private bool SetFront(int x, int y, char c, string colorCode)
     {
+        char oldChar = _frontBuffer[x, y].Char;
         _frontBuffer[x, y].Char = c;
         _frontBuffer[x, y].ColorCode = colorCode;
+        if (oldChar != c) return true;
+        else return false;
     }
 
     /// <summary>Modifica la celda virtual y la celda fisica posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
-    private void SetAll(int x, int y, char c, string colorCode, bool? forceDirty = null)
+    private bool SetAll(int x, int y, char c, string colorCode, bool? forceDirty = null)
     {
         SetCell(x, y, c, colorCode, forceDirty);
-        SetFront(x, y, c, colorCode);
+        return SetFront(x, y, c, colorCode);
     }
 
     /// <summary>
@@ -357,11 +361,12 @@ public class TermCanvas : IDisposable
         lock (_syncLock)
         {
             // Actualizamos el buffer interno para que se sepa que está vacío
+            bool changed = false;
             for (int x = 0; x < _width; x++)
-            {
-                SetAll(x, y, '\0', null, forceDirty: false);
+                changed |= SetAll(x, y, '\0', null, forceDirty: false);
+
+            if (changed)
                 _pendingClearLineX[y] = 0;
-            }
         }
     }
 
@@ -376,7 +381,7 @@ public class TermCanvas : IDisposable
 
         lock (_syncLock)
         {
-            if (!_anyDirty && !_forceClearScreen) return;
+            if (!_anyDirty && !_forceClearScreen && !CursorVisible) return;
 
             var sb = new StringBuilder(4096);
 
@@ -518,10 +523,12 @@ public class TermCanvas : IDisposable
             {
                 for (int y = y1; y <= y2; y++)
                 {
+                    bool changed = false;
                     for (int x = 0; x < _width; x++)
-                        SetAll(x, y, '\0', null, forceDirty: false);
+                        changed |= SetAll(x, y, '\0', null, forceDirty: false);
 
-                    _pendingClearLineX[y] = 0;
+                    if (changed)
+                        _pendingClearLineX[y] = 0;
                 }
             }
             else
@@ -553,11 +560,12 @@ public class TermCanvas : IDisposable
         {
             if (length == 0)
             {
+                bool changed = false;
                 for (int i = x; i < _width; i++)
-                {
-                    SetAll(i, y, '\0', null, forceDirty: false);
+                    changed |= SetAll(i, y, '\0', null, forceDirty: false);
+
+                if (changed)
                     _pendingClearLineX[y] = x;
-                }
             }
             else
             {
@@ -583,12 +591,14 @@ public class TermCanvas : IDisposable
         {
             // Actualizamos el buffer interno a vacío, pero NO lo ensuciamos 
             // porque el comando ANSI físico se encargará de borrarlo en la terminal.
+            bool changed = false;
             for (int j = y; j < _height; j++)
                 for (int i = (j == y) ? x : 0; i < _width; i++)
-                    SetAll(i, j, '\0', null, forceDirty: false);
+                    changed |= SetAll(i, j, '\0', null, forceDirty: false);
 
             // Guardamos la coordenada para que el Flush mande el \x1b[J
-            _pendingClearScreen = (x, y);
+            if (changed)
+                _pendingClearScreen = (x, y);
         }
     }
 
