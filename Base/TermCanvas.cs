@@ -593,31 +593,6 @@ public class TermCanvas : IDisposable
     }
 
     /// <summary>
-    /// Escribe texto en una posición específica y luego limpia el resto de la línea según el largo especificado.
-    /// </summary>
-    /// <param name="x">Columna base 0 donde empezar a escribir.</param>
-    /// <param name="y">Fila base 0 donde escribir.</param>
-    /// <param name="text">Texto a escribir (puede contener ANSI).</param>
-    /// <param name="color">Color inicial por defecto.</param>
-    /// <param name="length">
-    /// Cantidad de caracteres a limpiar desde el final del texto.
-    /// Si es mayor que 0, limpia exactamente esa cantidad.
-    /// Si es 0, limpia hasta el final de la línea.
-    /// Si es menor que 0, limpia hasta el final dejando sin tocar los últimos <c>-length</c> caracteres.
-    /// </param>
-    /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> o <paramref name="y"/> están fuera del canvas.</exception>
-    public void WriteAtAndClear(int x, int y, string text, AnsiColor color = null, int length = 0)
-    {
-        // 1. Escribimos el texto
-        WriteAt(x, y, text, color);
-        int visualLength = text.GetVisualLength();
-
-        // 2. Limpiamos la linea restante
-        ClearLineFrom(x + visualLength, y, length);
-    }
-
-    /// <summary>
     /// Libera los recursos usados por el canvas, deteniendo el monitor de resize si está activo.
     /// </summary>
     public void Dispose()

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using TermFlow.Base;
+using TermFlow.Base.CanvasExt;
 using TermFlow.Core;
 
 namespace TermFlow.Demo;
@@ -51,7 +52,7 @@ public static class TermCanvasDemo
             int height = canvas.Height;
 
             // 1. Marco estático 
-            DrawBox(canvas, 0, 0, width - 1, height - 1, AnsiColor.Dim);
+            canvas.DrawBorder(0, 0, width - 1, height - 1, AnsiColor.Dim);
             canvas.WriteAt(2, 0, " TERM CANVAS DASHBOARD ", AnsiColor.Cyan + AnsiColor.Bold);
             var text = $" Width: {width}, Height: {height} ";
             canvas.WriteAt(width / 2 - text.GetVisualLength() / 2, 0, text, AnsiColor.Red);
@@ -82,7 +83,7 @@ public static class TermCanvasDemo
             while (history.Count > graphW) history.Dequeue();
 
             canvas.WriteAt(2, 2, " CPU Usage (Real Process) ", AnsiColor.Green);
-            canvas.ClearArea(graphX, graphY, graphX + graphW - 1, graphY + graphH - 1);
+            canvas.ClearArea(graphX, graphY, graphX + 1, graphY + graphH - 1);
 
             int[] histArray = history.ToArray();
             for (int i = 0; i < histArray.Length; i++)
@@ -103,7 +104,7 @@ public static class TermCanvasDemo
             int logX = width / 2 + 2;
             int logW = width - logX - 3;
             canvas.WriteAt(logX, 2, " Event Log (fake logs)", AnsiColor.Magenta);
-            DrawBox(canvas, logX - 1, 3, logX + logW, height - 5, AnsiColor.Dim);
+            canvas.DrawBorder(logX - 1, 3, logX + logW, height - 5, AnsiColor.Dim);
 
             if (frame % 6 == 0)
             {
@@ -146,22 +147,5 @@ public static class TermCanvasDemo
 
         Console.CursorVisible = true;
         Engine.AlternateBuffer(false);
-    }
-
-    private static void DrawBox(TermCanvas canvas, int x1, int y1, int x2, int y2, AnsiColor color)
-    {
-        canvas.WriteAt(x1 + 1, y1, new string('─', x2 - x1 - 1), color);
-        canvas.WriteAt(x1 + 1, y2, new string('─', x2 - x1 - 1), color);
-
-        for (int y = y1 + 1; y < y2; y++)
-        {
-            canvas.WriteAt(x1, y, "│", color);
-            canvas.WriteAt(x2, y, "│", color);
-        }
-
-        canvas.WriteAt(x1, y1, "┌", color);
-        canvas.WriteAt(x2, y1, "┐", color);
-        canvas.WriteAt(x1, y2, "└", color);
-        canvas.WriteAt(x2, y2, "┘", color);
     }
 }
