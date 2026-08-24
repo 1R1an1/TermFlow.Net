@@ -260,35 +260,70 @@ public class TermCanvas : IDisposable
     /// <param name="text">Texto a escribir (puede contener ANSI).</param>
     /// <param name="color">Color inicial por defecto.</param>
     public void WriteAt(int x, int y, string text, AnsiColor color = null)
+        => WriteInternal(x, y, text, color, isVertical: false);
+
+    /// <summary>
+    /// Escribe texto en vertical comenzando desde una posición específica.
+    /// Soporta secuencias ANSI (ej: \x1b[31m, <see cref="AnsiColor.Red"/>, <see cref="ThemeColors.Primary"/>) dentro del string, aplicando el color a los caracteres.
+    /// Cada carácter se escribe en una fila consecutiva, manteniendo la misma columna.
+    /// </summary>
+    /// <param name="x">Columna base 0 donde empezar a escribir.</param>
+    /// <param name="y">Fila base 0 donde comenzar a escribir verticalmente.</param>
+    /// <param name="text">Texto a escribir verticalmente (cada carácter en una línea).</param>
+    /// <param name="color">Color inicial por defecto.</param>
+    public void WriteVertical(int x, int y, string text, AnsiColor color = null)
+        => WriteInternal(x, y, text, color, isVertical: true);
+
+    /// <summary>
+    /// Lógica interna compartida para escribir texto de forma horizontal o vertical.
+    /// No toma el lock.
+    /// </summary>
+    /// <param name="x">Columna base 0 donde empezar a escribir.</param>
+    /// <param name="y">Fila base 0 donde comenzar a escribir verticalmente.</param>
+    /// <param name="text">Texto a escribir verticalmente (cada carácter en una línea).</param>
+    /// <param name="color">Color inicial por defecto.</param>
+    private void WriteInternal(int x, int y, string text, AnsiColor color, bool isVertical)
     {
         if (string.IsNullOrEmpty(text)) return;
 
-        lock (_syncLock)
+        // Validación de límites iniciales según el modo
+        if (isVertical) { if (x < 0 || x >= _width) return; }
+        else { if (y < 0 || y >= _height) return; }
+
+        string currentColorCode = color ?? ThemeColors.Reset;
+        int currentX = x;
+        int currentY = y;
+
+        // Usamos la extensión para iterar el string de forma limpia
+        foreach (var (segment, isAnsi) in text.ParseAnsi())
         {
-            if (y < 0 || y >= _height) return;
-
-            string currentColorCode = color ?? ThemeColors.Reset;
-            int currentX = x;
-
-            // Usamos la extensión para iterar el string de forma limpia
-            foreach (var (segment, isAnsi) in text.ParseAnsi())
+            if (isAnsi)
             {
-                if (isAnsi)
-                {
-                    // Lógica de acumulación de colores
-                    if (segment == "\x1b[0m" || segment == "\x1b[m")
-                        currentColorCode = ThemeColors.Reset;
-                    else
-                        currentColorCode = currentColorCode == ThemeColors.Reset ? segment : currentColorCode + segment;
-                }
+                // Lógica de acumulación de colores
+                if (segment == "\x1b[0m" || segment == "\x1b[m")
+                    currentColorCode = ThemeColors.Reset;
                 else
+                    currentColorCode = currentColorCode == ThemeColors.Reset ? segment : currentColorCode + segment;
+            }
+            else
+            {
+                lock (_syncLock)
                 {
                     // Lógica de escritura de caracteres visibles
                     foreach (char c in segment)
                     {
-                        if (currentX >= 0 && currentX < _width)
-                            SetCell(currentX, y, c, currentColorCode);
-                        currentX++; // Solo el cursor visible avanza
+                        if (isVertical)
+                        {
+                            if (currentY >= 0 && currentY < _height)
+                                SetCell(currentX, currentY, c, currentColorCode);
+                            currentY++; // Avanzamos verticalmente
+                        }
+                        else
+                        {
+                            if (currentX >= 0 && currentX < _width)
+                                SetCell(currentX, currentY, c, currentColorCode);
+                            currentX++; // Avanzamos horizontalmente
+                        }
                     }
                 }
             }
