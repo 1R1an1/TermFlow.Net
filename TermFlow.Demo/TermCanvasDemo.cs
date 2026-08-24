@@ -96,7 +96,7 @@ public static class TermCanvasDemo
                     canvas.WriteAtAndClear(graphX + i, graphY + graphH - 1 - y, c.ToString(), color, 1);
                 }
             }
-            canvas.WriteAtAndClear(graphX, graphY + graphH + 1, $"Fake usage: {cpuPercent:D2}%, Real usage: {(cpuUsed / timePassed / Environment.ProcessorCount * 100.0):F2} (Cores: {Environment.ProcessorCount})", AnsiColor.White, -1);
+            try { canvas.WriteAtAndClear(graphX, graphY + graphH + 1, $"Fake usage: {cpuPercent:D2}%, Real usage: {(cpuUsed / timePassed / Environment.ProcessorCount * 100.0):F2} (Cores: {Environment.ProcessorCount})", AnsiColor.White, -1); } catch { }
 
             // 4. Panel de Logs 
             int logX = width / 2 + 2;
@@ -117,7 +117,7 @@ public static class TermCanvasDemo
                 AnsiColor logColor = log.Contains("ERROR") ? AnsiColor.Red :
                                      log.Contains("GC") ? AnsiColor.Yellow : AnsiColor.White;
 
-                canvas.WriteAtAndClear(logX, logY, log, logColor, -3);
+                try { canvas.WriteAtAndClear(logX, logY, log, logColor, -3); } catch { }
                 logY++;
             }
 

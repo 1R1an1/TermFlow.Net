@@ -82,6 +82,7 @@ public class TermCanvas : IDisposable
     /// </summary>
     /// <param name="width">Ancho inicial del canvas.</param>
     /// <param name="height">Alto inicial del canvas.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si el ancho o alto son menores o iguales a 0.</exception>
     public TermCanvas(int width, int height)
         => Init(width, height);
 
@@ -91,9 +92,12 @@ public class TermCanvas : IDisposable
     /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
     /// <param name="resizeIntervalms">Intervalo en milisegundos para comprobar cambios de tamaño.</param>
     /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="resizeIntervalms"/> es menor o igual a 0.</exception>
     [OverloadResolutionPriority(0)]
     public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Func<TermCanvas, Lock, Task> onResize = null)
     {
+        if (resizeIntervalms <= 0) throw new ArgumentOutOfRangeException(nameof(resizeIntervalms), "El intervalo debe ser mayor a 0.");
+
         _automaticResize = automaticResize;
         if (automaticResize)
         {
@@ -134,6 +138,7 @@ public class TermCanvas : IDisposable
     /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
     /// <param name="resizeIntervalms">Intervalo en milisegundos para comprobar cambios de tamaño.</param>
     /// <param name="onResize">Callback opcional que se invoca cuando la consola cambia de tamaño, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="resizeIntervalms"/> es menor o igual a 0.</exception>
     [OverloadResolutionPriority(1)]
     public TermCanvas(bool automaticResize = false, int resizeIntervalms = 250, Action<TermCanvas, Lock> onResize = null)
         : this(automaticResize, resizeIntervalms, (tc, lc) => { onResize?.Invoke(tc, lc); return Task.CompletedTask; }) { }
@@ -144,8 +149,12 @@ public class TermCanvas : IDisposable
     /// </summary>
     /// <param name="newWidth">Nuevo ancho.</param>
     /// <param name="newHeight">Nuevo alto.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si el ancho o alto son menores o iguales a 0.</exception>
     public void Resize(int newWidth, int newHeight)
     {
+        if (newWidth <= 0) throw new ArgumentOutOfRangeException(nameof(newWidth), "El nuevo ancho debe ser mayor a 0.");
+        if (newHeight <= 0) throw new ArgumentOutOfRangeException(nameof(newHeight), "El nuevo alto debe ser mayor a 0.");
+
         lock (_syncLock)
         {
             if (_width == newWidth && _height == newHeight && _buffer != null) return;
@@ -169,6 +178,9 @@ public class TermCanvas : IDisposable
     /// <param name="inicialHeight">Alto inicial.</param>
     private void Init(int inicialWidth, int inicialHeight)
     {
+        if (inicialWidth <= 0) throw new ArgumentOutOfRangeException(nameof(inicialWidth), "El ancho debe ser mayor a 0.");
+        if (inicialHeight <= 0) throw new ArgumentOutOfRangeException(nameof(inicialHeight), "El alto debe ser mayor a 0.");
+
         lock (_syncLock)
         {
             if (_width == inicialWidth && _height == inicialHeight && _buffer != null) return;
@@ -199,7 +211,7 @@ public class TermCanvas : IDisposable
         // Solo actualizamos y marcamos como sucia si ALGO cambió realmente respecto a la consola real
         if ((c == ' ' ? front.Char != ' ' && front.Char != '\0' : front.Char != c) || front.ColorCode != colorCode)
         {
-            SetCell(x, y, c, colorCode, dirty: forceDirty.HasValue ? forceDirty.Value : true);
+            ModifyCell(x, y, c, colorCode, dirty: forceDirty.HasValue ? forceDirty.Value : true);
             _anyDirty = true;
 
             // Actualizar los límites de filas sucias
@@ -207,10 +219,10 @@ public class TermCanvas : IDisposable
             if (y > _maxDirtyY) _maxDirtyY = y;
         }
         else if (_buffer[x, y] is var cell && (c == ' ' ? cell.Char != ' ' && cell.Char != '\0' : cell.Char != c) || cell.ColorCode != colorCode)
-            SetCell(x, y, c, colorCode, dirty: false);
+            ModifyCell(x, y, c, colorCode, dirty: false);
     }
     /// <summary>Modifica la celda posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
-    private void SetCell(int x, int y, char c, string colorCode, bool dirty)
+    private void ModifyCell(int x, int y, char c, string colorCode, bool dirty)
     {
         _buffer[x, y].Char = c;
         _buffer[x, y].ColorCode = colorCode;
@@ -259,6 +271,8 @@ public class TermCanvas : IDisposable
     /// <param name="y">Fila base 0 donde escribir.</param>
     /// <param name="text">Texto a escribir (puede contener ANSI).</param>
     /// <param name="color">Color inicial por defecto.</param>
+    /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango del canvas.</exception>
     public void WriteAt(int x, int y, string text, AnsiColor color = null)
         => WriteInternal(x, y, text, color, isVertical: false);
 
@@ -271,6 +285,8 @@ public class TermCanvas : IDisposable
     /// <param name="y">Fila base 0 donde comenzar a escribir verticalmente.</param>
     /// <param name="text">Texto a escribir verticalmente (cada carácter en una línea).</param>
     /// <param name="color">Color inicial por defecto.</param>
+    /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> está fuera del rango del canvas.</exception>
     public void WriteVertical(int x, int y, string text, AnsiColor color = null)
         => WriteInternal(x, y, text, color, isVertical: true);
 
@@ -284,11 +300,9 @@ public class TermCanvas : IDisposable
     /// <param name="color">Color inicial por defecto.</param>
     private void WriteInternal(int x, int y, string text, AnsiColor color, bool isVertical)
     {
-        if (string.IsNullOrEmpty(text)) return;
-
-        // Validación de límites iniciales según el modo
-        if (isVertical) { if (x < 0 || x >= _width) return; }
-        else { if (y < 0 || y >= _height) return; }
+        ArgumentNullException.ThrowIfNull(text);
+        if (isVertical) { if (x < 0 || x >= _width) throw new ArgumentOutOfRangeException(nameof(x), "La columna X está fuera del canvas."); }
+        else { if (y < 0 || y >= _height) throw new ArgumentOutOfRangeException(nameof(y), "La fila Y está fuera del canvas."); }
 
         string currentColorCode = color ?? ThemeColors.Reset;
         int currentX = x;
@@ -334,12 +348,13 @@ public class TermCanvas : IDisposable
     /// Limpia una fila completa en el canvas poniendo espacios y color <c>null</c>.
     /// </summary>
     /// <param name="y">Fila base 0 a limpiar.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango del canvas.</exception>
     public void ClearLine(int y)
     {
+        if (y < 0 || y >= _height) throw new ArgumentOutOfRangeException(nameof(y), "La fila está fuera del canvas.");
+
         lock (_syncLock)
         {
-            if (y < 0 || y >= _height) return;
-
             // Actualizamos el buffer interno para que se sepa que está vacío
             for (int x = 0; x < _width; x++)
             {
@@ -476,8 +491,12 @@ public class TermCanvas : IDisposable
     /// <param name="y1">Fila inicial base 0.</param>
     /// <param name="x2">Columna final base 0.</param>
     /// <param name="y2">Fila final base 0.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si alguna coordenada es negativa.</exception>
     public void ClearArea(int x1, int y1, int x2, int y2)
     {
+        if (x1 < 0 || y1 < 0 || x2 < 0 || y2 < 0)
+            throw new ArgumentOutOfRangeException("Las coordenadas no pueden ser negativas.");
+
         lock (_syncLock)
         {
             // Ordenamos las coordenadas por si vienen invertidas
@@ -523,11 +542,14 @@ public class TermCanvas : IDisposable
     /// Si es menor que 0, limpia desde <paramref name="x"/> hasta el final de la línea,
     /// dejando sin tocar los últimos <c>-length</c> caracteres.
     /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> o <paramref name="y"/> están fuera del canvas.</exception>
     public void ClearLineFrom(int x, int y, int length = 0)
     {
+        if (y < 0 || y >= _height) throw new ArgumentOutOfRangeException(nameof(y), "La fila está fuera del canvas.");
+        if (x < 0 || x >= _width) throw new ArgumentOutOfRangeException(nameof(x), "La columna está fuera del canvas.");
+
         lock (_syncLock)
         {
-            if (y < 0 || y >= _height || x < 0) return;
             if (length == 0)
             {
                 for (int i = x; i < _width; i++)
@@ -550,12 +572,14 @@ public class TermCanvas : IDisposable
     /// </summary>
     /// <param name="x">Columna base 0.</param>
     /// <param name="y">Fila base 0.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si las coordenadas están fuera del canvas.</exception>
     public void ClearFromPoint(int x, int y)
     {
+        if (y < 0 || y >= _height || x < 0 || x >= _width)
+            throw new ArgumentOutOfRangeException("Las coordenadas (x, y) están fuera del canvas.");
+
         lock (_syncLock)
         {
-            if (y < 0 || y >= _height || x < 0 || x >= _width) return;
-
             // Actualizamos el buffer interno a vacío, pero NO lo ensuciamos 
             // porque el comando ANSI físico se encargará de borrarlo en la terminal.
             for (int j = y; j < _height; j++)
@@ -580,11 +604,13 @@ public class TermCanvas : IDisposable
     /// Si es 0, limpia hasta el final de la línea.
     /// Si es menor que 0, limpia hasta el final dejando sin tocar los últimos <c>-length</c> caracteres.
     /// </param>
+    /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> o <paramref name="y"/> están fuera del canvas.</exception>
     public void WriteAtAndClear(int x, int y, string text, AnsiColor color = null, int length = 0)
     {
         // 1. Escribimos el texto
         WriteAt(x, y, text, color);
-        int visualLength = text?.GetVisualLength() ?? 0;
+        int visualLength = text.GetVisualLength();
 
         // 2. Limpiamos la linea restante
         ClearLineFrom(x + visualLength, y, length);
