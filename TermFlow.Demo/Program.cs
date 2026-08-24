@@ -31,7 +31,7 @@ internal class Program
         "Salir"
     ];
 
-    private static async Task Main(string[] args)
+    private static async Task Main()
     {
         Engine.Setup();
         ThemeColors.Primary = AnsiColor.Green + AnsiColor.Bold;
@@ -40,7 +40,18 @@ internal class Program
         int lastChoice = 0;
         while (true)
         {
-            int choice = await SearchList.FilterOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems, lastChoice);
+            int choice;
+
+            try { choice = await SearchList.FilterOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems, lastChoice); }
+            catch (Exception ex)
+            {
+                Engine.ExitFullScreen(true);
+                TextViewer.Error($"Excepción en el menu de la demo, mensaje: \"{ex.Message}\", StackTrace:\n{ex.StackTrace}");
+                TextViewer.Info("Saliendo de la demo . . .");
+                TextInput.PressToContinue();
+                return;
+            }
+
             if (choice == -1 || choice == MainMenuItems.Length - 1) break;
             lastChoice = choice;
 
