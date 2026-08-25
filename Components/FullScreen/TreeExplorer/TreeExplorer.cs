@@ -4,10 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Base;
+using TermFlow.Base.CanvasExt;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen.TreeExplorer
@@ -270,9 +270,9 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             bool isBlocked = options.DeniedPaths.Contains(currentNode); // Por si la raíz ya está bloqueada
 
             int cursor = 0;
-            StringBuilder buffer = new StringBuilder(4096);
             ScrollState layout = new ScrollState();
             bool shouldRender = true;
+            using var canvas = new TermCanvas(true, false, 100, (_, _) => shouldRender = true);
 
             HashSet<string> marked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             HashSet<string> unmarkedExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -377,15 +377,13 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             while (!token.IsCancellationRequested && !exit)
             {
                 if (layout.Update(cursor, entries.Count, ReservedRows))
-                {
                     shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
+
                 cursor = layout.Cursor;
 
                 if (shouldRender)
                 {
-                    RenderTree(buffer, title, currentNode, entries, layout.Cursor, layout.Scroll, layout.VisibleRows, isMulti, filter, isBlocked, marked, unmarkedExceptions, dataSource, router);
+                    RenderTree(canvas, title, currentNode, entries, layout.Cursor, layout.Scroll, layout.VisibleRows, isMulti, filter, isBlocked, marked, unmarkedExceptions, dataSource, router);
                     shouldRender = false;
                 }
 
@@ -447,7 +445,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// Dibuja el explorador completo: cabecera, ruta actual, ítems con checkbox (en modo multi),
         /// indicadores de scroll y footer contextual con los atajos.
         /// </summary>
-        /// <param name="buffer">StringBuilder reutilizable.</param>
+        /// <param name="canvas">TermCanvas reutilizable.</param>
         /// <param name="title">Título a mostrar.</param>
         /// <param name="currentDir">Ruta del nodo actualmente abierto.</param>
         /// <param name="entries">Entradas visibles del nodo actual.</param>
@@ -461,32 +459,30 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="unmarkedExceptions">Conjunto de excepciones de unmark.</param>
         /// <param name="dataSource">Origen de datos para resolver herencia de marcas.</param>
         /// <param name="router">Enrutador que renderiza el footer.</param>
-        private static void RenderTree(StringBuilder buffer, string title, string currentDir, List<ExplorerEntry> entries,
+        private static void RenderTree(TermCanvas canvas, string title, string currentDir, List<ExplorerEntry> entries,
             int cursor, int scroll, int visibleRows, bool isMulti, ExplorerFilter filter, bool isBlocked,
             HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource, InputRouter router)
         {
-            buffer.Clear().Append("\x1b[H");
+            canvas.Resize(Console.WindowWidth, Console.WindowHeight);
 
-            buffer.Append("\x1b[K\n");
-            buffer.Append($"  {title}\x1b[K\n");
-            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
-            buffer.Append($"  Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}\x1b[K\n");
+            // 1. Cabecera estática (Coordenadas fijas)
+            canvas.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
+            canvas.WriteAtAndClear(2, 3, $"Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}");
+
+            if (scroll > 0) canvas.WriteAtAndClear(2, 4, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
+            else canvas.ClearLine(4);
 
             int end = Math.Min(entries.Count, scroll + visibleRows);
 
-            if (scroll > 0) buffer.Append($"  {ThemeColors.Dim}↑ ({scroll} más arriba){ThemeColors.Reset}\x1b[K\n");
-            else buffer.Append("\x1b[K\n");
-
             if (entries.Count == 0)
             {
-                buffer.Append($"    {ThemeColors.Dim}{(isBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}{ThemeColors.Reset}\x1b[K\n");
-                for (int i = 1; i < visibleRows; i++) buffer.Append("\x1b[K\n");
+                canvas.WriteAtAndClear(4, 5, $"{(isBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}", ThemeColors.Dim);
+                for (int i = 1; i < visibleRows; i++) canvas.ClearLine(5 + i);
             }
             else
             {
-                for (int i = scroll; i < end; i++)
+                canvas.DrawList(entries, 2, 5, visibleRows, scroll, false, (entry, i) =>
                 {
-                    ExplorerEntry entry = entries[i];
                     string displayName = entry.IsDirectory ? $"{entry.Name}/" : entry.Name;
 
                     string checkPrefix = "";
@@ -509,31 +505,20 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                         }
                     }
 
-                    string itemColor = entry.IsDirectory ? ThemeColors.Selector + AnsiColor.Bold : ThemeColors.Selector;
-
                     if (i == cursor)
-                    {
-                        buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{itemColor}{displayName}{ThemeColors.Reset}\x1b[K\n");
-                    }
+                        return $"{ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{(entry.IsDirectory ? ThemeColors.Selector + AnsiColor.Bold : ThemeColors.Selector)}{displayName}{ThemeColors.Reset}";
                     else
-                    {
-                        string normalStyle = entry.IsDirectory ? AnsiColor.White + AnsiColor.Bold : $"{ThemeColors.Dim}";
-                        buffer.Append($"    {checkPrefix}{normalStyle}{displayName}{ThemeColors.Reset}\x1b[K\n");
-                    }
-                }
-
-                for (int i = end - scroll; i < visibleRows; i++) buffer.Append("\x1b[K\n");
+                        return $"  {checkPrefix}{(entry.IsDirectory ? AnsiColor.White + AnsiColor.Bold : ThemeColors.Dim)}{displayName}{ThemeColors.Reset}";
+                });
             }
 
             int remaining = entries.Count - end;
-            if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
-            else buffer.Append("\x1b[K\n");
+            if (remaining > 0) canvas.WriteAtAndClear(2, canvas.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
+            else canvas.ClearLine(canvas.Height - 3);
 
-            router.RenderFooter(buffer);
-            buffer.Append("\x1b[K\n");
-            buffer.Append("\x1b[K");
+            canvas.WriteAt(2, canvas.Height - 2, router.RenderFooter());
 
-            Console.Write(buffer.ToString());
+            canvas.Flush();
         }
 
         #endregion

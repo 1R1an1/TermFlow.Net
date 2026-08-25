@@ -2,10 +2,10 @@
  * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Base;
+using TermFlow.Base.CanvasExt;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
@@ -21,7 +21,6 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         private static volatile bool isMenuRunning = false;
 
-        // FIX: Cambiado a 6 para empujar las instrucciones hacia arriba y dejar la última línea libre
         private const int ReservedRows = 7;
 
         private static int _cursor = 0;
@@ -116,8 +115,8 @@ namespace TermFlow.Components.FullScreen
         private static async Task RunMenuEngine(string title, string[] items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex)
         {
             ScrollState layout = new ScrollState();
-            StringBuilder buffer = new StringBuilder(2048);
             bool shouldRender = true;
+            using var canvas = new TermCanvas(true, false, 100, onResize: (_, _) => { shouldRender = true; });
 
             _cursor = startIndex;
             _exit = false;
@@ -136,14 +135,11 @@ namespace TermFlow.Components.FullScreen
             while (!token.IsCancellationRequested && !_exit)
             {
                 if (layout.Update(_cursor, items.Length, ReservedRows))
-                {
                     shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
 
                 if (shouldRender)
                 {
-                    RenderMenu(buffer, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
+                    RenderMenu(canvas, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router);
                     shouldRender = false;
                 }
 
@@ -158,9 +154,9 @@ namespace TermFlow.Components.FullScreen
         }
 
         /// <summary>
-        /// Dibuja el menú completo (cabecera, ítems visibles, indicadores de scroll y footer) en el buffer.
+        /// Dibuja el menú completo (cabecera, ítems visibles, indicadores de scroll y footer) en el canvas.
         /// </summary>
-        /// <param name="buffer">StringBuilder reutilizable para ensamblar la salida.</param>
+        /// <param name="canvas">Canvas virtual para renderizar.</param>
         /// <param name="title">Título a mostrar.</param>
         /// <param name="items">Lista completa de ítems.</param>
         /// <param name="cursor">Índice del _cursor actual.</param>
@@ -168,26 +164,21 @@ namespace TermFlow.Components.FullScreen
         /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox y marca los ítems incluidos.</param>
         /// <param name="router">Enrutador de input encargado de renderizar el footer contextual.</param>
-        private static void RenderMenu(StringBuilder buffer, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
+        private static void RenderMenu(TermCanvas canvas, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
-            buffer.Clear();
+            canvas.Resize(Console.WindowWidth, Console.WindowHeight);
 
-            // Mover al origen (0,0)
-            buffer.Append("\x1b[H");
-
-            // Cabecera optimizada: quitamos el \n extra. Agregamos \x1b[K para limpiar fantasmas.
-            buffer.Append("\x1b[K\n");
-            buffer.Append($"  {title}\x1b[K\n");
-            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
+            // Cabecera
+            canvas.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
 
             int end = Math.Min(items.Length, scroll + visibleRows);
 
-            // Indicador superior: si es 0, deja exactamente una línea en blanco limpia
-            if (scroll > 0) buffer.Append($"  {ThemeColors.Dim}↑ ({scroll} más arriba){ThemeColors.Reset}\x1b[K\n");
-            else buffer.Append("\x1b[K\n");
+            // Indicador superior
+            if (scroll > 0) canvas.WriteAtAndClear(2, 3, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
+            else canvas.ClearLine(3);
 
-            // Elementos con borrado de línea individual (\x1b[K) para matar el bug de "pepeo"
-            for (int i = scroll; i < end; i++)
+            // Elementos
+            canvas.DrawList(items, 2, 4, visibleRows, scroll, false, (item, i) =>
             {
                 string checkPrefix = "";
                 if (selectedMap != null)
@@ -198,25 +189,19 @@ namespace TermFlow.Components.FullScreen
                 }
 
                 if (i == cursor)
-                    buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{items[i]}{ThemeColors.Reset}\x1b[K\n");
+                    return $"{ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{item}{ThemeColors.Reset}";
                 else
-                    buffer.Append($"    {checkPrefix}{ThemeColors.Dim}{items[i]}{ThemeColors.Reset}\x1b[K\n");
-            }
+                    return $"  {checkPrefix}{ThemeColors.Dim}{item}{ThemeColors.Reset}";
+            });
 
-            // Relleno estricto limpiando residuos del fondo
-            for (int i = end - scroll; i < visibleRows; i++)
-                buffer.Append("\x1b[K\n");
-
-            // Indicador inferior
             int remaining = items.Length - end;
-            if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
-            else buffer.Append("\x1b[K\n");
+            if (remaining > 0) canvas.WriteAtAndClear(2, canvas.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
+            else canvas.ClearLine(canvas.Height - 3);
 
-            router.RenderFooter(buffer);
-            buffer.Append("\x1b[K\n");
-            buffer.Append("\x1b[K");
+            // Footer
+            canvas.WriteAt(2, canvas.Height - 2, router.RenderFooter());
 
-            Console.Write(buffer.ToString());
+            canvas.Flush();
         }
     }
 }

@@ -2,10 +2,10 @@
  * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Base;
+using TermFlow.Base.CanvasExt;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
@@ -121,9 +121,9 @@ namespace TermFlow.Components.FullScreen
         private static async Task RunSearchEngine(string title, string[] items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex, Action OnConfirm)
         {
             ScrollState layout = new ScrollState();
-            StringBuilder buffer = new StringBuilder(2048);
             bool shouldRender = true;
-            Console.CursorVisible = true;
+            using var canvas = new TermCanvas(true, false, 100, onResize: (_, _) => shouldRender = true);
+            canvas.CursorVisible = true;
             var searchEdit = new LineEdit("  Buscar: » ", router);
             router.BindConfirm(OnConfirm);
 
@@ -159,15 +159,13 @@ namespace TermFlow.Components.FullScreen
                         filtered.Add((items[i], i));
 
                 if (layout.Update(_cursor, filtered.Count, ReservedRows))
-                {
                     shouldRender = true;
-                    Console.Write("\x1b[2J");
-                }
+
                 _cursor = layout.Cursor;
 
                 if (shouldRender)
                 {
-                    RenderSearch(buffer, title, currentQuery, searchCursorPos, filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router, searchEdit);
+                    RenderSearch(canvas, title, currentQuery, searchCursorPos, filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router, searchEdit);
                     shouldRender = false;
                 }
 
@@ -179,13 +177,13 @@ namespace TermFlow.Components.FullScreen
                 }
                 await Task.Delay(15, token);
             }
-            Console.CursorVisible = false;
+            canvas.CursorVisible = false;
         }
 
         /// <summary>
         /// Dibuja el buscador completo (cabecera, query, ítems filtrados, indicadores de scroll, footer y cursor).
         /// </summary>
-        /// <param name="buffer">StringBuilder reutilizable.</param>
+        /// <param name="canvas">TermCanvas reutilizable.</param>
         /// <param name="title">Título a mostrar.</param>
         /// <param name="queryString">Texto actual de la búsqueda.</param>
         /// <param name="searchCursorPos">Posición del cursor dentro del texto de búsqueda.</param>
@@ -196,71 +194,62 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox marcando estos índices originales.</param>
         /// <param name="router">Enrutador que renderiza el footer contextual.</param>
         /// <param name="searchEdit">Instancia de <see cref="LineEdit"/> para acceder al largo visual del prompt.</param>
-        private static void RenderSearch(StringBuilder buffer, string title, string queryString, int searchCursorPos, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router, LineEdit searchEdit)
+        private static void RenderSearch(TermCanvas canvas, string title, string queryString, int searchCursorPos, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router, LineEdit searchEdit)
         {
-            buffer.Clear();
-            buffer.Append("\x1b[H");
+            canvas.Resize(Console.WindowWidth, Console.WindowHeight);
 
             // Cabecera
-            buffer.Append("\x1b[K\n");
-            buffer.Append($"  {title}\x1b[K\n");
-            buffer.Append($"  {ThemeColors.Dim}{new string(ConsoleGlyphs.Horizontal, title.GetVisualLength())}{ThemeColors.Reset}\x1b[K\n");
-
-            // Input de búsqueda (sin el _ falso, ahora usamos cursor real)
-            buffer.Append($"  Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}\x1b[K\n");
+            canvas.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
+            canvas.WriteAtAndClear(2, 3, $"Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}");
 
             int end = Math.Min(filtered.Count, scroll + visibleRows);
 
             // Indicador de scroll superior
-            if (scroll > 0) buffer.Append($"  {ThemeColors.Dim}↑ ({scroll} más arriba){ThemeColors.Reset}\x1b[K\n");
-            else buffer.Append("\x1b[K\n");
+            if (scroll > 0) canvas.WriteAtAndClear(2, 4, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
+            else canvas.ClearLine(4);
 
             // Renderizado de ítems filtrados
             if (filtered.Count == 0)
             {
-                buffer.Append($"    {ThemeColors.Dim}(No se encontraron resultados){ThemeColors.Reset}\x1b[K\n");
-                for (int i = 1; i < visibleRows; i++) buffer.Append("\x1b[K\n");
+                canvas.WriteAtAndClear(2, 5, $"  (No se encontraron resultados)", ThemeColors.Dim);
+                for (int i = 1; i < visibleRows; i++) canvas.ClearLine(5 + i);
             }
             else
             {
-                for (int i = scroll; i < end; i++)
+                canvas.DrawList(filtered, 2, 5, visibleRows, scroll, false, (item, i) =>
                 {
                     string checkPrefix = "";
                     if (selectedMap != null)
                     {
-                        bool isChecked = selectedMap.Contains(filtered[i].OriginalIndex);
+                        bool isChecked = selectedMap.Contains(item.OriginalIndex);
                         checkPrefix = isChecked ? $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} "
                                                 : $"{ThemeColors.Dim}{ConsoleGlyphs.Unchecked}{ThemeColors.Reset} ";
                     }
 
                     if (i == cursor)
-                        buffer.Append($"  {ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{filtered[i].Text}{ThemeColors.Reset}\x1b[K\n");
+                        return $"{ThemeColors.Selector}{ConsoleGlyphs.Indicator}{ThemeColors.Reset} {checkPrefix}{AnsiColor.Bold}{ThemeColors.Selector}{item.Text}{ThemeColors.Reset}";
                     else
-                        buffer.Append($"    {checkPrefix}{ThemeColors.Dim}{filtered[i].Text}{ThemeColors.Reset}\x1b[K\n");
-                }
-
-                // Relleno de líneas vacías estricto
-                for (int i = end - scroll; i < visibleRows; i++) buffer.Append("\x1b[K\n");
+                        return $"  {checkPrefix}{ThemeColors.Dim}{item.Text}{ThemeColors.Reset}";
+                });
             }
 
             // Indicador de scroll inferior
             int remaining = filtered.Count - end;
-            if (remaining > 0) buffer.Append($"  {ThemeColors.Dim}↓ ({remaining} más abajo){ThemeColors.Reset}\x1b[K\n");
-            else buffer.Append("\x1b[K\n");
+            if (remaining > 0) canvas.WriteAtAndClear(2, canvas.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
+            else canvas.ClearLine(canvas.Height - 3);
 
             // Footer
-            router.RenderFooter(buffer);
-            buffer.Append("\x1b[K\n\x1b[K");
+            canvas.WriteAt(2, canvas.Height - 2, router.RenderFooter());
 
             // --- POSICIONAMIENTO DEL CURSOR REAL ---
-            int width = Console.WindowWidth;
+            int width = canvas.Width;
             var wrappedQueryLines = (searchEdit.LastPromptLine + queryString).WrapText(width);
             var (targetLine, targetCol) = LineEdit.MapPositionTo2D(wrappedQueryLines, searchEdit.PromptLength + searchCursorPos, width);
 
             int cursorRow = 4 + targetLine; // La fila 4 es donde empieza el input de búsqueda
-            buffer.Append($"\x1b[{cursorRow};{targetCol}H");
+            canvas.CursorPos = (X: targetCol - 1, Y: cursorRow - 1);
 
-            Console.Write(buffer.ToString());
+            canvas.Flush();
         }
     }
 }

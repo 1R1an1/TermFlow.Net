@@ -4,10 +4,10 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Base;
+using TermFlow.Base.CanvasExt;
 using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen
@@ -87,6 +87,7 @@ namespace TermFlow.Components.FullScreen
         private static bool _isActive = false;
         private static int? _maxLogs;
         private static readonly Lock _lock = new();
+        private static bool widthChanged = false;
 
         /// <summary><c>true</c> mientras el panel está corriendo en pantalla completa.</summary>
         public static bool IsActive => _isActive;
@@ -94,6 +95,8 @@ namespace TermFlow.Components.FullScreen
         /// <summary>Si está activo, el panel forzará el cursor real de la consola en estas coordenadas tras dibujar.</summary>
         internal static long? FocusEntryId { get; set; } = null;
         internal static int FocusVisualCol { get; set; } = 0;
+
+        private static TermCanvas _canvas;
 
         /// <summary>
         /// Inicia el panel: entra en pantalla completa, limpia colas previas y lanza los loops
@@ -108,6 +111,7 @@ namespace TermFlow.Components.FullScreen
             _isActive = true;
 
             _cts = new CancellationTokenSource();
+            _canvas = new TermCanvas(true, false, 100, onResize: (_, _) => { widthChanged = true; RequestRender(); });
 
             while (_keyQueue.TryDequeue(out _)) { }
             while (_keySignal.Wait(0)) { }
@@ -129,6 +133,9 @@ namespace TermFlow.Components.FullScreen
             _cts?.Cancel();
             _cts?.Dispose();
             _cts = null;
+
+            _canvas?.Dispose();
+            _canvas = null;
 
             Engine.ExitFullScreen();
 
@@ -302,27 +309,13 @@ namespace TermFlow.Components.FullScreen
         {
             try
             {
-                int lastWidth = Console.WindowWidth;
-                int lastHeight = Console.WindowHeight;
-                var sb = new StringBuilder(4096);
-
                 while (!token.IsCancellationRequested)
                 {
                     await _renderSignal.WaitAsync(token);
                     Interlocked.Exchange(ref _renderPending, 0);
 
-                    int width = Console.WindowWidth;
-                    int height = Console.WindowHeight;
-
-                    // Si la consola cambia de tamaño, recalculamos todo el historial
-                    bool widthChanged = false;
-                    if (width != lastWidth || height != lastHeight)
-                    {
-                        lastWidth = width;
-                        lastHeight = height;
-                        widthChanged = true;
-                        sb.Append("\x1b[2J"); // Limpiar pantalla
-                    }
+                    _canvas.Resize(Console.WindowWidth, Console.WindowHeight);
+                    int width = _canvas.Width, height = _canvas.Height;
 
                     List<List<string>> wrappedLines = new List<List<string>>();
                     int totalLines = 0;
@@ -364,13 +357,11 @@ namespace TermFlow.Components.FullScreen
                         currentScroll = _scrollOffset;
                     }
 
-                    // Construir buffer visible
-                    sb.Clear();
-                    sb.Append("\x1b[H");
-
+                    // Construir buffer visible en el Canvas
                     int lineIndex = 0;
                     int visibleStart = Math.Max(0, totalLines - height - currentScroll);
                     int visibleEnd = Math.Min(totalLines, visibleStart + height);
+                    int rowsDrawn = 0;
 
                     for (int i = 0; i < wrappedLines.Count && lineIndex < visibleEnd; i++)
                     {
@@ -379,37 +370,31 @@ namespace TermFlow.Components.FullScreen
                         {
                             if (lineIndex >= visibleStart && lineIndex < visibleEnd)
                             {
-                                sb.Append(lines[j]).Append("\x1b[K");
-                                if (lineIndex < visibleEnd - 1) sb.Append("\n");
+                                _canvas.WriteAtAndClear(0, rowsDrawn, lines[j]);
+                                rowsDrawn++;
                             }
                             lineIndex++;
                             if (lineIndex >= visibleEnd) break;
                         }
                     }
-
-                    sb.Append("\x1b[J");
+                    if (rowsDrawn < height) _canvas.ClearFromPoint(0, rowsDrawn);
 
                     // --- Logica de cursor real de la consola ---
                     if (focusLineStart != -1 && focusLineStart >= visibleStart && focusLineStart < visibleEnd)
                     {
                         int row = focusLineStart + focusLineOffset - visibleStart + 1; // ANSI es base 1
 
+                        _canvas.CursorVisible = true;
                         if (row > 0 && row <= height) // Asegurar que no se salga de la pantalla visible
-                        {
-                            sb.Append($"\x1b[{row};{focusCursorCol}H");
-                            sb.Append("\x1b[?25h"); // Mostrar cursor real
-                        }
+                            _canvas.CursorPos = (X: focusCursorCol - 1, Y: row - 1);
                         else if (row == height + 1) // Auto-wrap en la última fila visible
-                        {
-                            sb.Append($"\x1b[{height};1H");
-                            sb.Append("\x1b[?25h");
-                        }
+                            _canvas.CursorPos = (X: 0, Y: height - 1);
                     }
                     else
-                        sb.Append("\x1b[?25l"); // Ocultar cursor real
+                        _canvas.CursorVisible = false;
 
-                    // ---------------------------------------------------
-                    Console.Write(sb.ToString());
+                    _canvas.Flush();
+                    widthChanged = false;
                 }
             }
             catch (OperationCanceledException) { }

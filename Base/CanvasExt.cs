@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 1R1an1 */
 using System;
+using System.Collections.Generic;
 using TermFlow.Core;
 
 namespace TermFlow.Base.CanvasExt;
@@ -80,5 +81,65 @@ public static class CanvasExt
 
         // 2. Limpiamos la linea restante
         try { canvas.ClearLineFrom(x + visualLength, y, length); } catch (ArgumentOutOfRangeException) { }
+    }
+
+    /// <summary>
+    /// Dibuja un encabezado escribiendo un título y un subrayado justo debajo.
+    /// El subrayado se ajusta automáticamente al largo visible del título.
+    /// </summary>
+    /// <param name="canvas">Instancia del canvas.</param>
+    /// <param name="x">Columna base 0 donde empezar.</param>
+    /// <param name="y">Fila base 0 del título.</param>
+    /// <param name="title">Texto del título.</param>
+    /// <param name="titleColor">Color del título.</param>
+    /// <param name="lineColor">Color del subrayado (si es null, usa el mismo del título).</param>
+    public static void WriteHeader(this TermCanvas canvas, int x, int y, string title, AnsiColor titleColor = null, AnsiColor lineColor = null)
+    {
+        // 1. Escribimos el título
+        canvas.WriteAt(x, y, title, titleColor);
+
+        // 2. Calculamos el largo visible (ignorando ANSI) y dibujamos el subrayado
+        int visualLength = title.GetVisualLength();
+        if (visualLength > 0)
+            canvas.WriteAt(x, y + 1, new string(ConsoleGlyphs.Horizontal, visualLength), lineColor);
+    }
+
+    /// <summary>
+    /// Dibuja una lista de strings a partir de una coordenada, hacia abajo o hacia arriba.
+    /// </summary>
+    /// <param name="canvas">Instancia del canvas.</param>
+    /// <param name="items">Lista de strings a dibujar.</param>
+    /// <param name="x">Columna base 0.</param>
+    /// <param name="y">Fila base 0 de inicio.</param>
+    /// <param name="maxItems">Cantidad máxima de elementos a dibujar.</param>
+    /// <param name="bottomToTop">Si es true, dibuja hacia arriba. Si es false, hacia abajo.</param>
+    /// <param name="startIndex">Índice desde el cual empezar a dibujar.</param>
+    /// <param name="formatter">Función que recibe el string y su índice, y devuelve el string formateado.</param>
+    public static void DrawList<T>(this TermCanvas canvas, IReadOnlyList<T> items, int x, int y, int maxItems = -1, int startIndex = 0, bool bottomToTop = false, Func<T, int, string> formatter = null)
+    {
+        ArgumentNullException.ThrowIfNull(canvas);
+        ArgumentNullException.ThrowIfNull(items);
+
+        if (items.Count == 0) return;
+        maxItems = maxItems <= 0 ? items.Count : maxItems;
+
+        int drawCount = Math.Min(items.Count, maxItems);
+
+        for (int i = 0; i < drawCount; i++)
+        {
+            int itemIndex = startIndex + i;
+            if (itemIndex >= items.Count) break;
+
+            int currentY = bottomToTop ? (y - i) : (y + i);
+            string text = formatter is null ? items[itemIndex].ToString() : formatter(items[itemIndex], itemIndex);
+            canvas.WriteAtAndClear(x, currentY, text);
+        }
+
+        // Limpiamos las líneas que sobran
+        for (int i = drawCount; i < maxItems; i++)
+        {
+            int currentY = bottomToTop ? (y - i) : (y + i);
+            canvas.ClearLine(currentY);
+        }
     }
 }

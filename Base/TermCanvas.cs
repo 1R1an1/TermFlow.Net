@@ -102,7 +102,7 @@ public class TermCanvas : IDisposable
         if (automaticResize)
         {
             _resizeCts = new CancellationTokenSource();
-            int _lastHeight = Console.WindowHeight; int _lastWidth = Console.WindowWidth;
+            int _lastHeight = Console.WindowHeight, _lastWidth = Console.WindowWidth;
             Init(_lastWidth, _lastHeight);
             ThreadPool.QueueUserWorkItem(async _ =>
             {
