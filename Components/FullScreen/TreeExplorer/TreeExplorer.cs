@@ -246,8 +246,9 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="path">Ruta absoluta a evaluar.</param>
         /// <returns>Nivel de profundidad.</returns>
         private static int GetDepth(string path)
-            => path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Length - 1;
-
+            => path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
+                .Skip(path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':' ? 1 : 0)
+                .Count();
         /// <summary>
         /// Bucle central de la exploración. Maneja navegación, scroll, marcas (en modo multi)
         /// y entrada de teclado hasta que el usuario confirma o cancela.
@@ -476,7 +477,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
             if (entries.Count == 0)
             {
-                canvas.WriteAtAndClear(4, 5, $"{(isBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}", ThemeColors.Dim);
+                canvas.WriteAtAndClear(2, 5, $"  {(isBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}", ThemeColors.Dim);
                 for (int i = 1; i < visibleRows; i++) canvas.ClearLine(5 + i);
             }
             else

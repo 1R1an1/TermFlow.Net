@@ -38,10 +38,14 @@ TermFlow.Net te permite construir desde simples barras de progreso hasta aplicac
     - [`LiveConsole`](#liveconsole)
   - [Motor Core](#motor-core)
   - [Base](#base)
+    - [`TermCanvas`](#termcanvas)
+    - [`CanvasExt`](#canvasext)
+    - [`LineEdit`](#lineedit)
+    - [`InputRouter`](#inputrouter)
   - [Sistema de temas y glifos](#sistema-de-temas-y-glifos)
-  - [Atajos de teclado](#atajos-de-teclado)
   - [Estructura del proyecto](#estructura-del-proyecto)
   - [Compatibilidad](#compatibilidad)
+  - [Documentación](#documentación)
   - [Licencia](#licencia)
 
 ---
@@ -141,7 +145,8 @@ TermFlow.Net se organiza en cuatro capas separadas:
 │  └──────────────┘  └─────────────────────────┘  │
 ├─────────────────────────────────────────────────┤
 │                      Base                       │
-│        TermCanvas · LineEdit · InputRouter      │
+│   TermCanvas · CanvasExt · LineEdit ·           │
+│              InputRouter                        │
 ├─────────────────────────────────────────────────┤
 │                Core (Motor)                     │
 │   Engine · InputReader · ScrollState            │
@@ -155,7 +160,7 @@ TermFlow.Net se organiza en cuatro capas separadas:
 - **Components/InLine**: componentes que se imprimen en el flujo normal de la consola, sin tomar el control total.
 - **Components/FullScreen**: componentes que entran al alternate buffer y toman control de toda la pantalla.
 
-> 💡 Todos los componentes InLine detectan automáticamente si `LivePanel` está activo y redirigen su salida al panel en lugar de imprimir directamente.
+> Todos los componentes InLine detectan automáticamente si `LivePanel` está activo y redirigen su salida al panel en lugar de imprimir directamente.
 
 ---
 
@@ -175,13 +180,16 @@ TextViewer.WriteHeader("Sección 1");         // Subrayado con ───
 ```
 
 ### `TextInput`
-Entrada de texto, preguntas sí/no y "presionar para continuar".
+Entrada de texto (con soporte opcional de ocultar el texto), preguntas sí/no y "presionar para continuar".
 
 ```csharp
 string nombre    = await TextInput.ReadStringAsync("Nombre: ");
+string password  = await TextInput.ReadStringAsync("Token: ", isPassword: true);
 bool   confirmar = await TextInput.AskAsync("¿Continuar?");
 TextInput.PressToContinue();
 ```
+
+> Con `isPassword: true`, el texto ingresado se enmascara con `*` en pantalla. El contenido real se devuelve igual, solo cambia cómo se muestra.
 
 ### `TableView`
 Tablas auto-ajustables con bordes Unicode. El ancho de cada columna se calcula a partir del contenido.
@@ -255,13 +263,13 @@ int[] idxs = await SearchList.FilterMultiAsync("Etiquetas", tags);
 ```
 
 ### `TreeExplorer`
-Explorador jerárquico con soporte para directorios físicos o estructuras virtuales. Soporta filtros (todo / solo carpetas / solo archivos) y selección múltiple con herencia de marcas (marcar una carpeta marca todos sus hijos).
+Explorador jerárquico con soporte para directorios físicos o estructuras virtuales. Soporta filtros (todo / solo carpetas / solo archivos), `DeniedPaths` (rutas bloqueadas), `HiddenPaths` (rutas ocultas), `MinDepth` (profundidad mínima) y `IgnoreSymlinks`, todos configurables vía `ExplorerOptions`. La selección múltiple tiene herencia de marcas (marcar una carpeta marca todos sus hijos).
 
 ```csharp
 // Exploración física
 string   archivo  = await TreeExplorer.ExploreOneAsync("Abrir archivo", @"/home/user/docs");
 string[] archivos = await TreeExplorer.ExploreMultiAsync("Seleccionar logs",
-    @"/var/log", ExplorerFilter.OnlyFiles);
+    @"/var/log", new ExplorerOptions { Filter = ExplorerFilter.OnlyFiles });
 
 // Exploración virtual (rutas en memoria)
 string[] virtuales = await TreeExplorer.ExploreMultiAsync(
@@ -272,7 +280,17 @@ string[] virtuales = await TreeExplorer.ExploreMultiAsync(
 
 // Origen de datos personalizado (implementando IExplorerDataSource)
 string[] custom = await TreeExplorer.ExploreMultiAsync(
-    "Mi origen", miDataSource, ExplorerFilter.All);
+    "Mi origen", miDataSource, new ExplorerOptions { Filter = ExplorerFilter.All });
+
+// Con opciones avanzadas
+var opts = new ExplorerOptions {
+    Filter = ExplorerFilter.OnlyFiles,
+    DeniedPaths = ["/var/log/secure"],
+    HiddenPaths = ["/var/log/.hidden"],
+    MinDepth = 1,
+    IgnoreSymlinks = true
+};
+string[] filtrados = await TreeExplorer.ExploreMultiAsync("Logs accesibles", "/var/log", opts);
 ```
 
 ### `LivePanel`
@@ -292,7 +310,7 @@ LivePanel.Stop();
 ```
 
 ### `LiveConsole`
-Consola interactiva estilo chat con historial scrollable, barra divisoria inteligente que avisa cuando hay mensajes nuevos abajo, y soporte para input multilínea con `Shift+Enter`.
+Consola interactiva estilo chat con historial scrollable, barra divisoria inteligente que avisa cuando hay mensajes nuevos abajo. Puede detenerse programáticamente con `Stop()` (equivalente a presionar Escape o escribir `/exit`).
 
 ```csharp
 var console = new LiveConsole();
@@ -304,7 +322,7 @@ await console.RunAsync(">>> ", async (input) =>
     else
         console.WriteLog($"{ThemeColors.Primary}Echo{ThemeColors.Reset}: {input}");
 });
-// Salir con /exit o Escape
+// Salir con /exit, Escape o console.Stop() desde otro hilo
 ```
 
 ---
@@ -327,11 +345,42 @@ await console.RunAsync(">>> ", async (input) =>
 
 Capa intermedia entre `Core` y `Components`. Piezas reutilizables construidas sobre las primitivas de `Core`.
 
-| Clase         | Responsabilidad                                                                                                              |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `TermCanvas`  | Motor de renderizado intermedio (Canvas Virtual) con Dirty Tracking, Thread-Safety y manejo optimizado de memoria.           |
-| `LineEdit`    | Lógica de editor de línea que gestiona buffer, cursor y navegación. Utilizado por `TextInput`, `LiveConsole` y `SearchList`. |
-| `InputRouter` | Enrutador fluent de teclas a acciones, con agrupación automática del footer contextual.                                      |
+### `TermCanvas`
+Motor de renderizado intermedio (Canvas Virtual). Mantiene un mapa de la pantalla en memoria con **double buffer** y **dirty tracking diferencial**: en cada `Flush()` solo se emiten las celdas que cambiaron respecto al frame anterior, generando un único `string` ANSI optimizado para un solo `Console.Write`. Thread-safe con redimensionamiento automático opcional vía hilo de monitoreo. Utilizado por todos los componentes fullscreen.
+
+```csharp
+using var canvas = new TermCanvas(automaticResize: true, resizeCanvas: false, resizeIntervalms: 100,
+    onResize: (c, _) => { /* re-renderizar */ });
+
+canvas.WriteAt(2, 1, "Hola", ThemeColors.Primary);
+canvas.ClearLine(3);
+canvas.Flush();
+```
+
+### `CanvasExt`
+Extensiones de método sobre `TermCanvas` para primitivas visuales comunes: bordes, encabezados con subrayado automático, listas con selección y limpieza de filas sobrantes, escritura con limpieza del resto de la línea, etc. Usadas internamente por todos los componentes FullScreen.
+
+```csharp
+canvas.DrawBorder(5, 5, 50, 20, color: ThemeColors.Dim);
+canvas.WriteHeader(2, 1, "Título", lineColor: ThemeColors.Dim);
+canvas.DrawList(items, 2, 4, visibleRows, scroll, formatter: (item, i) => /* ... */);
+canvas.WriteAtAndClear(2, 3, "texto que se corta limpio al final");
+```
+
+### `LineEdit`
+Lógica de editor de línea: buffer de texto, cursor, navegación con flechas, Ctrl+Flechas (salto de palabras), Inicio/Fin, Backspace/Delete. Utilizado por `TextInput`, `LiveConsole` y `SearchList`. 
+
+### `InputRouter`
+Enrutador fluent de teclas a acciones. Permite registrar binds (`Bind`, `BindConfirm`, `BindCancel`, `BindNavigate`, `BindScroll`, `BindSelect`, `BindChar`, `BindUnhandled`) y genera automáticamente un footer contextual con los atajos activos.
+
+```csharp
+var router = new InputRouter()
+    .BindConfirm(() => { /* Enter */ })
+    .BindCancel(() => { /* Esc/q */ })
+    .BindNavigate(() => cursor--, () => cursor++)
+    .Bind("g/G", "extremos", () => cursor = 0, 'g')
+    .BindChar("", "", () => cursor = items.Length - 1, 'G');
+```
 
 ---
 
@@ -361,8 +410,9 @@ AnsiColor miEstilo = AnsiColor.BgBlue + AnsiColor.BrightWhite + AnsiColor.Bold;
 Console.Write($"{miEstilo}Texto{ThemeColors.Reset}");
 ```
 
-> 💡 Las extensiones de `AnsiStringHelper` (`GetVisualLength`, `WrapText`, `Truncate`, `StripAnsi`) permiten medir y recortar texto con ANSI sin romper los códigos de color.
+> Las extensiones de `AnsiStringHelper` (`GetVisualLength`, `WrapText`, `Truncate`, `StripAnsi`) permiten medir y recortar texto con ANSI sin romper los códigos de color.
 
+<!--
 ---
 
 ## Atajos de teclado
@@ -386,7 +436,7 @@ Los componentes FullScreen comparten un esquema común de atajos (configurables 
 | `Shift+Enter`         | Salto de línea en el input   | LiveConsole                                            |
 | `End`                 | Ir al presente (scroll 0)    | LiveConsole                                            |
 | `/exit`               | Comando para salir           | LiveConsole                                            |
-
+-->
 ---
 
 
@@ -404,7 +454,8 @@ TermFlow.Net/
 │   ├── ThemeColors.cs                  # Paleta semántica
 │   └── ConsoleGlyphs.cs                # Glifos Unicode
 ├── Base/
-│   ├── TermCanvas.cs                   # Canvas Virtual con Dirty Tracking
+│   ├── TermCanvas.cs                   # Canvas Virtual con Dirty Tracking + Double Buffer
+│   ├── CanvasExt.cs                    # Extensiones: DrawBorder, WriteHeader, DrawList, etc.
 │   ├── LineEdit.cs                     # Logica de editor de línea (buffer + cursor)
 │   └── InputRouter.cs                  # Binds fluent + footer contextual
 ├── Components/
@@ -468,6 +519,10 @@ Si encontrás un bug o querés proponer una mejora, abrí un [Issue](https://git
 
 ---
 -->
+
+## Documentación
+
+Toda la API pública y privada (clases, métodos, parámetros y excepciones) está documentada con comentarios XML de C# `/// <summary>`, disponible en el IntelliSense **(VS Code, Visual Studio y Rider)** al usar la librería. La documentación está en español.
 
 ## Licencia
 
