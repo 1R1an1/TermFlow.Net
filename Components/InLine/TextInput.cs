@@ -32,7 +32,7 @@ namespace TermFlow.Components.InLine
         /// <param name="token">Token para cancelar la lectura.</param>
         /// <returns>Texto ingresado al presionar Enter, o <c>null</c> si fue cancelado.</returns>
         /// <exception cref="InvalidOperationException">Se lanza si ya hay una entrada de texto en curso.</exception>
-        public static async Task<string> ReadStringAsync(string prompt, CancellationToken token = default)
+        public static async Task<string> ReadStringAsync(string prompt, bool isPassword = false, CancellationToken token = default)
         {
             if (isInputRunning) throw new InvalidOperationException("Ya hay un input corriendo");
             else isInputRunning = true;
@@ -64,13 +64,13 @@ namespace TermFlow.Components.InLine
                 if (LivePanel.IsActive)
                 {
                     LivePanel.FocusVisualCol = fullPromptVisualLength + cursorPos;
-                    LivePanel.UpdateLine(dynamicId.Value, prompt + text);
+                    LivePanel.UpdateLine(dynamicId.Value, prompt + (isPassword ? new string('*', text.Length) : text));
                 }
                 else
                 {
                     int w = Math.Max(1, Console.WindowWidth);
                     int absPos = editor.PromptLength + cursorPos;
-                    var lines = (editor.LastPromptLine + text).WrapText(w);
+                    var lines = (editor.LastPromptLine + (isPassword ? new string('*', text.Length) : text)).WrapText(w);
                     int totalLines = lines.Count;
 
                     int targetLine = absPos / w;

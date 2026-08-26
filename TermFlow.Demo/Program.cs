@@ -112,7 +112,8 @@ internal class Program
     {
         TextViewer.WriteHeader($"{ThemeColors.Primary}TextInput{ThemeColors.Reset}");
         string nombre = await TextInput.ReadStringAsync("¿Cómo te llamás? ");
-        TextViewer.Info($"Ingresaste: \"{nombre}\"");
+        string password = await TextInput.ReadStringAsync("¿Cual es tu contraseña? ", true);
+        TextViewer.Info($"Nombre: \"{nombre}\", Contraseña: \"{password}\"");
         bool ok = await TextInput.AskAsync("¿Confirmás los datos?");
         TextViewer.Info($"Respondiste: {(ok ? "sí" : "no")}");
     }
