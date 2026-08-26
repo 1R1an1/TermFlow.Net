@@ -48,6 +48,8 @@ public class TermCanvas : IDisposable
     private bool _forceClearScreen = false;
     private (int X, int Y)? _pendingClearScreen = null; // Guarda la Y para el \x1b[J
     private readonly Dictionary<int, int> _pendingClearLineX = new(); // Y -> X para el \x1b[K
+    private string _cursorColor = ThemeColors.Reset;
+    private bool? _lastCursorVisible = null;
 
     /// <summary>
     /// Obtiene o establece donde se posicionará el cursor real (base 0) de la consola en el próximo <see cref="Flush"/>.
@@ -381,22 +383,21 @@ public class TermCanvas : IDisposable
 
         lock (_syncLock)
         {
-            if (!_anyDirty && !_forceClearScreen && !CursorVisible) return;
+            if (!_anyDirty && !_forceClearScreen && (_lastCursorVisible == CursorVisible)) return;
 
             var sb = new StringBuilder(4096);
 
             // Si se pidió un Clear o Resize, mandamos el comando ANSI de borrar todo.
             if (_forceClearScreen)
             {
-                sb.Append("\x1b[2J\x1b[H"); // Borrar pantalla y mover cursor a 0,0
+                sb.Append("\x1b[2J"); // Borrar pantalla
                 _forceClearScreen = false;
             }
 
+            int? cursorX = null;
+            int? cursorY = null;
             if (_anyDirty)
             {
-                string currentColorCode = ThemeColors.Reset;
-                int? cursorX = null;
-                int? cursorY = null;
 
                 int startY = Math.Max(0, _minDirtyY);
                 if (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y < startY)
@@ -428,22 +429,17 @@ public class TermCanvas : IDisposable
                             if (string.IsNullOrEmpty(cellColor)) cellColor = ThemeColors.Reset;
 
                             // Si no hay cursor seteado o veníamos de un salto, posicionamos
-                            if (cursorX == null || cursorY == null || cursorX != x || cursorY != y)
+                            if (cursorX != x || cursorY != y)
                             {
                                 // ANSI es base 1, sumamos 1 a las coordenadas
                                 sb.Append($"\x1b[{y + 1};{x + 1}H");
                                 cursorX = x;
                                 cursorY = y;
-
-                                sb.Append(ThemeColors.Reset);
-                                sb.Append(cellColor);
-                                currentColorCode = cellColor;
                             }
-                            else if (cellColor != currentColorCode)
+                            if (cellColor != _cursorColor)
                             {
-                                sb.Append(ThemeColors.Reset);
-                                sb.Append(cellColor);
-                                currentColorCode = cellColor;
+                                sb.Append(ThemeColors.Reset + (cellColor == ThemeColors.Reset ? "" : cellColor));
+                                _cursorColor = cellColor;
                             }
 
                             // Escribimos el carácter y lo guardamos en _frontBuffer
@@ -464,9 +460,6 @@ public class TermCanvas : IDisposable
                 // Limpiamos cualquier comando de línea que haya quedado fuera del rango startY-endY
                 _pendingClearLineX.Clear();
 
-                if (sb.Length > 0)
-                    sb.Append(ThemeColors.Reset);
-
                 _anyDirty = false;
 
                 // Reseteamos los límites para el próximo frame
@@ -475,14 +468,12 @@ public class TermCanvas : IDisposable
             }
 
             // --- Lógica de Cursor Real ---
-            if (CursorVisible)
-            {
-                if (CursorPos.HasValue)
-                    sb.Append($"\x1b[{CursorPos.Value.Y + 1};{CursorPos.Value.X + 1}H");
-                sb.Append("\x1b[?25h"); // Mostrar cursor
-            }
-            else
-                sb.Append("\x1b[?25l"); // Ocultar cursor
+            if (CursorVisible && CursorPos.HasValue && (cursorX != CursorPos.Value.X || cursorY != CursorPos.Value.Y))
+                sb.Append($"\x1b[{CursorPos.Value.Y + 1};{CursorPos.Value.X + 1}H");
+            if (_lastCursorVisible != CursorVisible)
+                sb.Append(CursorVisible ? "\x1b[?25h" : "\x1b[?25l"); // Ocultar cursor
+
+            _lastCursorVisible = CursorVisible;
             output = sb.Length > 0 ? sb.ToString() : null;
         }
         if (output != null)
