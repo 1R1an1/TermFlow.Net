@@ -294,33 +294,34 @@ internal class Program
         }
     }
 
+    private static LiveConsole liveconsole;
     private static async Task TestLiveConsole()
     {
-        var console = new LiveConsole();
+        liveconsole ??= new LiveConsole();
         AnsiColor prevPrimary = ThemeColors.Primary;
         ThemeColors.Primary = AnsiColor.Cyan + AnsiColor.Bold;
         try
         {
-            await console.RunAsync(">>> ", async (input) =>
+            await liveconsole.RunAsync(">>> ", async (input) =>
             {
                 string trimmed = input.Trim();
 
                 if (trimmed.Equals("/help", StringComparison.OrdinalIgnoreCase))
                 {
-                    console.WriteLog($"{ThemeColors.Bright}Comandos disponibles{ThemeColors.Reset}:");
-                    console.WriteLog("  /help     — mostrar esta ayuda");
-                    console.WriteLog("  /echo X   — repetir X");
-                    console.WriteLog("  /exit     — salir");
+                    liveconsole.WriteLog($"{ThemeColors.Bright}Comandos disponibles{ThemeColors.Reset}:");
+                    liveconsole.WriteLog("  /help     — mostrar esta ayuda");
+                    liveconsole.WriteLog("  /echo X   — repetir X");
+                    liveconsole.WriteLog("  /exit     — salir");
                 }
                 else if (trimmed.StartsWith("/echo ", StringComparison.OrdinalIgnoreCase))
                 {
                     string rest = input.Substring(6);
-                    console.WriteLog($"{ThemeColors.Primary}Echo{ThemeColors.Reset}: {rest}");
+                    liveconsole.WriteLog($"{ThemeColors.Primary}Echo{ThemeColors.Reset}: {rest}");
                 }
                 else
                 {
-                    console.WriteLog($"{ThemeColors.Dim}Escribiste{ThemeColors.Reset}: {input}");
-                    console.WriteLog($"{ThemeColors.Dim}(probá /help){ThemeColors.Reset}");
+                    liveconsole.WriteLog($"{ThemeColors.Dim}Escribiste{ThemeColors.Reset}: {input}");
+                    liveconsole.WriteLog($"{ThemeColors.Dim}(probá /help){ThemeColors.Reset}");
                 }
             });
         }
