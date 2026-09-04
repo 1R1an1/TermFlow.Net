@@ -171,7 +171,7 @@ namespace TermFlow.Components.InLine
                 if (LivePanel.IsActive)
                 {
                     LivePanel.FocusVisualCol = fullPromptVisualLength + (currentChar != '\0' ? 1 : 0);
-                    LivePanel.UpdateLine(dynamicId.Value, fullPrompt + currentChar);
+                    LivePanel.UpdateLine(dynamicId.Value, fullPrompt + (currentChar == '\0' ? ' ' : currentChar));
                 }
                 else
                 {
@@ -207,6 +207,7 @@ namespace TermFlow.Components.InLine
 
             try
             {
+                Render();
                 if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
                 while (!finished)
                 {
