@@ -37,23 +37,22 @@ namespace TermFlow.Components.InLine
             if (isInputRunning) throw new InvalidOperationException("Ya hay un input corriendo");
             else isInputRunning = true;
 
-            long? dynamicId = null;
             var editor = new LineEdit(prompt);
             int lastHeight = 0;
             int fullPromptVisualLength = prompt.Replace("\r", "").Replace("\n", "").GetVisualLength();
             bool previousEndedOnExactWidth = false;
             int lastCursorTargetLine = 0;
 
-            if (LivePanel.IsActive)
+            var console = new FlowBridge(prompt);
+            if (console.PanelId is not null)
             {
-                dynamicId = LivePanel.AddDynamic(prompt);
-                LivePanel.FocusEntryId = dynamicId;
+                LivePanel.FocusEntryId = console.PanelId;
                 LivePanel.FocusVisualCol = fullPromptVisualLength;
             }
             else
             {
                 Console.CursorVisible = true;
-                Console.Write(prompt);
+                console.Write(prompt, false);
             }
 
             // Unificación del renderizado para no repetir código
@@ -61,10 +60,10 @@ namespace TermFlow.Components.InLine
             {
                 if (isFinished) return;
 
-                if (LivePanel.IsActive)
+                if (console.PanelId is not null)
                 {
                     LivePanel.FocusVisualCol = fullPromptVisualLength + cursorPos;
-                    LivePanel.UpdateLine(dynamicId.Value, prompt + (isPassword ? new string('*', text.Length) : text));
+                    console.Write(prompt + (isPassword ? new string('*', text.Length) : text, false, false));
                 }
                 else
                 {
@@ -80,26 +79,26 @@ namespace TermFlow.Components.InLine
                     // Recuperar cursor al fondo físico antes de limpiar
                     int lastBottom = lastHeight - 1 + (previousEndedOnExactWidth ? 1 : 0);
                     if (lastCursorTargetLine < lastBottom)
-                        Console.Write($"\x1b[{lastBottom - lastCursorTargetLine}B");
+                        console.Write($"\x1b[{lastBottom - lastCursorTargetLine}B", false, false);
 
                     // Limpieza relativa
                     int physLines = lastHeight + (previousEndedOnExactWidth ? 1 : 0);
-                    if (physLines > 1) Console.Write($"\x1b[{physLines - 1}F");
-                    Console.Write("\r\x1b[0J");
+                    if (physLines > 1) console.Write($"\x1b[{physLines - 1}F", false, false);
+                    console.Write("\r\x1b[0J", false, false);
 
                     // Impresión
                     bool endsExact = lines.Count > 0 && lines[^1].Length == w;
-                    Console.Write(string.Join("\n", lines));
-                    if (endsExact) Console.Write("\n");
+                    console.Write(string.Join("\n", lines), false, false);
+                    if (endsExact) console.Write("\n", false, false);
 
                     // Posicionar cursor
                     int currentPhys = totalLines + (endsExact ? 1 : 0);
                     int move = targetLine - (currentPhys - 1);
-                    if (move < 0) Console.Write($"\x1b[{-move}A");
-                    else if (move > 0) Console.Write($"\x1b[{move}B");
+                    if (move < 0) console.Write($"\x1b[{-move}A", false, false);
+                    else if (move > 0) console.Write($"\x1b[{move}B", false, false);
 
-                    Console.Write('\r');
-                    if (targetCol > 0) Console.Write($"\x1b[{targetCol}C");
+                    console.Write("\r", false, false);
+                    if (targetCol > 0) console.Write($"\x1b[{targetCol}C", false, false);
 
                     // Guardar estado
                     lastHeight = totalLines;
@@ -110,20 +109,17 @@ namespace TermFlow.Components.InLine
 
             try
             {
-                if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
+                if (console.PanelId is not null) LivePanel.ClearKeysQueue();
 
                 string result = await editor.ExecuteAsync(Render, token);
 
                 if (result != null)
-                {
-                    if (LivePanel.IsActive) { LivePanel.FocusEntryId = null; LivePanel.UpdateLine(dynamicId.Value, prompt + result); }
-                    else Console.WriteLine();
-                }
+                    console.Write(prompt + result, true);
                 return result;
             }
             finally
             {
-                if (LivePanel.IsActive) LivePanel.FocusEntryId = null;
+                if (console.PanelId is not null) LivePanel.FocusEntryId = null;
                 else Console.CursorVisible = false;
                 isInputRunning = false;
             }
@@ -146,41 +142,41 @@ namespace TermFlow.Components.InLine
             else isInputRunning = true;
 
             string fullPrompt = $"{prompt} {ThemeColors.Info}[y/n]{ThemeColors.Reset} ";
-            long? dynamicId = null;
             char currentChar = '\0';
             int promptLength = fullPrompt.GetVisualLength();
             int fullPromptVisualLength = fullPrompt.Replace("\r", "").Replace("\n", "").GetVisualLength();
-            bool? response = null;
+            bool response = false;
             bool finished = false;
             bool validCharDrawed = false;
 
-            if (LivePanel.IsActive)
+
+            var console = new FlowBridge(prompt);
+            if (console.PanelId is not null)
             {
-                dynamicId = LivePanel.AddDynamic(fullPrompt);
-                LivePanel.FocusEntryId = dynamicId;
+                LivePanel.FocusEntryId = console.PanelId.Value;
                 LivePanel.FocusVisualCol = fullPromptVisualLength;
             }
             else
             {
                 Console.CursorVisible = true;
-                Console.Write(fullPrompt);
+                console.Write(fullPrompt, false);
             }
 
             void Render()
             {
-                if (LivePanel.IsActive)
+                if (console.PanelId is not null)
                 {
                     LivePanel.FocusVisualCol = fullPromptVisualLength + (currentChar != '\0' ? 1 : 0);
-                    LivePanel.UpdateLine(dynamicId.Value, fullPrompt + (currentChar == '\0' ? ' ' : currentChar));
+                    console.Write(fullPrompt + (currentChar == '\0' ? ' ' : currentChar), false, false);
                 }
                 else
                 {
                     if (validCharDrawed)
-                        Console.Write("\b \b");
+                        console.Write("\b \b", false, false);
 
                     if (currentChar != '\0')
                     {
-                        Console.Write(currentChar);
+                        console.Write(currentChar.ToString(), false, false);
                         validCharDrawed = true;
                     }
                     else
@@ -208,26 +204,21 @@ namespace TermFlow.Components.InLine
             try
             {
                 Render();
-                if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
+                if (console.PanelId is not null) LivePanel.ClearKeysQueue();
                 while (!finished)
                 {
-                    currentKey = LivePanel.IsActive ? await LivePanel.WaitForKeyAsync(token) : InputReader.ReadInput().KeyInfo;
+                    currentKey = await console.ReadAsync();
 
                     var evt = new ConsoleInputEvent { Type = InputEventType.Key, KeyInfo = currentKey };
                     router.Handle(evt);
                 }
 
-                if (response.HasValue)
-                {
-                    if (LivePanel.IsActive) { LivePanel.FocusEntryId = null; LivePanel.UpdateLine(dynamicId.Value, fullPrompt + currentChar); }
-                    else Console.WriteLine();
-                    return response.Value;
-                }
-                return false;
+                console.Write(fullPrompt + currentChar, true);
+                return response;
             }
             finally
             {
-                if (LivePanel.IsActive) LivePanel.FocusEntryId = null;
+                if (console.PanelId is not null) LivePanel.FocusEntryId = null;
                 else Console.CursorVisible = false;
                 isInputRunning = false;
             }
@@ -239,9 +230,10 @@ namespace TermFlow.Components.InLine
         /// <param name="message">Mensaje a mostrar antes de la pausa.</param>
         public static void PressToContinue(string message = "[Presiona enter para regresar]")
         {
-            TextViewer.WritePlain($"{ThemeColors.Dim}  {message}{ThemeColors.Reset}");
+            var console = new FlowBridge();
+            console.Write($"{ThemeColors.Dim}  {message}{ThemeColors.Reset}", true);
             if (LivePanel.IsActive) LivePanel.ClearKeysQueue();
-            while ((LivePanel.IsActive ? LivePanel.WaitForKey().Key : Console.ReadKey(true).Key) != ConsoleKey.Enter) { }
+            while (console.Read().Key != ConsoleKey.Enter) { }
         }
     }
 }

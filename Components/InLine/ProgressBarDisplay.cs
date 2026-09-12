@@ -2,9 +2,9 @@
  * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Diagnostics;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Base;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
@@ -62,7 +62,7 @@ namespace TermFlow.Components.InLine
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             var taskState = new ProgressTaskImpl();
-            long _panelId = LivePanel.IsActive ? panelId ?? LivePanel.AddDynamic($"{description} 0%") : -1;
+            var console = new FlowBridge(panelId: panelId);
 
             var stopwatch = Stopwatch.StartNew();
 
@@ -77,7 +77,6 @@ namespace TermFlow.Components.InLine
             {
                 try
                 {
-                    StringBuilder lineBuffer = new StringBuilder(256);
                     string oldLine = "";
 
                     while (!internalCts.Token.IsCancellationRequested)
@@ -138,18 +137,7 @@ namespace TermFlow.Components.InLine
 
                         if (line != oldLine)
                         {
-                            if (LivePanel.IsActive)
-                                LivePanel.UpdateLine(_panelId, line);
-                            else
-                            {
-                                // Ensamblar buffer completo de la línea
-                                lineBuffer.Clear();
-                                lineBuffer.Append("\r");
-                                lineBuffer.Append(line);
-                                lineBuffer.Append("\x1b[K"); // Eliminar fantasmas a la derecha
-
-                                Console.Write(lineBuffer.ToString());
-                            }
+                            console.Write(line);
                             oldLine = line;
                         }
 
@@ -176,11 +164,7 @@ namespace TermFlow.Components.InLine
                 await renderTask;
 
                 string finalLine = $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} " + (finalText ?? $"{description} {ThemeColors.Success}[{new string('█', 20)}] 100% {ThemeColors.Dim}(Completado){ThemeColors.Reset}");
-
-                if (LivePanel.IsActive)
-                    LivePanel.UpdateLine(_panelId, finalLine);
-                else
-                    Console.Write($"\r{finalLine}\x1b[K\n");
+                console.Write(finalLine, true);
             }
         }
 

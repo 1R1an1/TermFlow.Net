@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using TermFlow.Base;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
@@ -209,15 +210,7 @@ namespace TermFlow.Components.InLine
             sb.Remove(sb.Length - 1, 1); // Quita el último '\n' sobrante
 
             string content = sb.ToString();
-            if (LivePanel.IsActive)
-            {
-                if (panelId is null)
-                    LivePanel.AddLog(content);
-                else
-                    LivePanel.UpdateLine(panelId.Value, content);
-            }
-            else
-                Console.WriteLine(content);
+            FlowBridge.WriteIndependient(content, true, panelId);
         }
 
         // ───────────────────────── Atajo estático ─────────────────────────

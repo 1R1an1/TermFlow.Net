@@ -88,6 +88,13 @@ namespace TermFlow.Components.FullScreen
         private static int? _maxLogs;
         private static readonly Lock _lock = new();
         private static bool widthChanged = false;
+        private static bool _keepLogs = false;
+
+        /// <summary>
+        /// <c>true</c> si el panel está detenido pero conservando el historial (puede reactivarse con Start).
+        /// Permite actualizar/crear logs aunque el panel no esté visible.
+        /// </summary>
+        public static bool IsKeepingLogs => _keepLogs;
 
         /// <summary><c>true</c> mientras el panel está corriendo en pantalla completa.</summary>
         public static bool IsActive => _isActive;
@@ -105,10 +112,13 @@ namespace TermFlow.Components.FullScreen
         /// <param name="maxLogs">Cantidad máxima opcional de entradas a retener en memoria (FIFO).</param>
         public static void Start(int? maxLogs = null)
         {
-            if (_isActive) return;
+            if (_isActive && _keepLogs == false) return;
 
             _maxLogs = maxLogs;
             _isActive = true;
+            _keepLogs = false;
+
+            widthChanged = true;  // Forzar recálculo de wraps por si el ancho cambió mientras el panel estaba apagado
 
             _cts = new CancellationTokenSource();
             _canvas = new TermCanvas(true, false, 100, onResize: (_, _) => { widthChanged = true; RequestRender(); });
@@ -120,15 +130,19 @@ namespace TermFlow.Components.FullScreen
 
             _ = Task.Run(() => RenderLoop(_cts.Token));
             _ = Task.Run(() => InputLoop(_cts.Token));
+
+            RequestRender();
         }
 
         /// <summary>
-        /// Detiene el panel, cancela los loops, limpia el historial y restaura la consola.
+        /// Detiene el panel, cancela los loops, limpia el historial (opcional) y restaura la consola.
         /// </summary>
-        public static void Stop()
+        /// <param name="keepLogs">Si es <c>true</c>, conserva el historial y los IDs para reanudar luego con <see cref="Start"/>.</param>
+        public static void Stop(bool keepLogs = false)
         {
             if (!_isActive) return;
-            _isActive = false;
+            _keepLogs = keepLogs;
+            _isActive = keepLogs;
 
             _cts?.Cancel();
             _cts?.Dispose();
@@ -141,10 +155,13 @@ namespace TermFlow.Components.FullScreen
 
             lock (_lock)
             {
-                _history.Clear();
-                _entryLookup.Clear();
-                _nextId = 0;
-                _scrollOffset = 0;
+                if (!keepLogs)
+                {
+                    _history.Clear();
+                    _entryLookup.Clear();
+                    _nextId = 0;
+                }
+                _scrollOffset = 0;  // Siempre volver al fondo al reactivar
 
                 while (_keyQueue.TryDequeue(out _)) { }
                 while (_keySignal.Wait(0)) { }
@@ -155,8 +172,12 @@ namespace TermFlow.Components.FullScreen
         /// Agrega un log estático (no actualizable) al historial.
         /// </summary>
         /// <param name="content">Texto del log ya formateado con ANSI.</param>
+        /// <exception cref="InvalidOperationException">Se llama cuando el panel no está activo.</exception>
         internal static void AddLog(string content)
         {
+            if (!_isActive && !_keepLogs)
+                throw new InvalidOperationException("No se puede agregar un log, el LivePanel no está activo.");
+
             lock (_lock)
             {
                 long id = Interlocked.Increment(ref _nextId);
@@ -188,8 +209,12 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="initialContent">Contenido inicial de la línea.</param>
         /// <returns>ID único de la línea para usar con <see cref="UpdateLine"/>.</returns>
+        /// <exception cref="InvalidOperationException">Se llama cuando el panel no está activo.</exception>
         public static long AddDynamic(string initialContent)
         {
+            if (!_isActive && !_keepLogs)
+                throw new InvalidOperationException("No se puede agregar una línea dinámica, el LivePanel no está activo.");
+
             long id;
             lock (_lock)
             {
@@ -223,6 +248,7 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="id">ID retornado por <see cref="AddDynamic"/>.</param>
         /// <param name="newContent">Nuevo texto a mostrar.</param>
+        /// <exception cref="InvalidOperationException">Se llama cuando el panel no está activo.</exception>
         public static void UpdateLine(long id, string newContent) => ApplyUpdate(id, l => l.Content = newContent);
 
         /// <summary>
@@ -231,6 +257,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="id">ID de la línea a modificar.</param>
         /// <param name="prefix">Nuevo prefijo (se deja sin cambios si es <c>null</c>).</param>
         /// <param name="suffix">Nuevo sufijo (se deja sin cambios si es <c>null</c>).</param>
+        /// <exception cref="InvalidOperationException">Se llama cuando el panel no está activo.</exception>
         public static void UpdateDecorations(long id, string prefix = null, string suffix = null) => ApplyUpdate(id, entry =>
         {
             if (prefix != null) entry.Prefix = prefix;
@@ -242,8 +269,12 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="id">ID de la línea consultada.</param>
         /// <returns>Tupla (prefix, suffix); vacíos si el ID no existe.</returns>
+        /// <exception cref="InvalidOperationException">Se llama cuando el panel no está activo.</exception>
         public static (string prefix, string suffix) GetDecorations(long id)
         {
+            if (!_isActive && !_keepLogs)
+                throw new InvalidOperationException("No se pueden obtener las decoraciones, el LivePanel no está activo.");
+
             lock (_lock)
             {
                 return _entryLookup.TryGetValue(id, out var entry)
@@ -259,8 +290,12 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="id">ID de la entrada a modificar.</param>
         /// <param name="updateAction">Acción que muta la entrada.</param>
+        /// <exception cref="InvalidOperationException">Ocurre cuando se intenta utilizar mientras el panel esta desactivado</exexception>
         private static void ApplyUpdate(long id, Action<LogEntry> updateAction)
         {
+            if (!_isActive && !_keepLogs)
+                throw new InvalidOperationException("No se puede actualizar la línea, el LivePanel no está activo.");
+
             lock (_lock)
             {
                 // 1. Búsqueda O(1) instantánea (Sin recorrer listas)
@@ -458,9 +493,11 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="token">Token de cancelación.</param>
         /// <returns><see cref="ConsoleKeyInfo"/> de la tecla presionada, o <c>default</c> si se cancela.</returns>
+        /// <exception cref="InvalidOperationException">Se llama cuando el panel no está activo.</exception>
         internal static async Task<ConsoleKeyInfo> WaitForKeyAsync(CancellationToken token = default)
         {
-            if (!_isActive) return default;
+            if (!_isActive)
+                throw new InvalidOperationException("No se puede esperar una tecla, el LivePanel no está activo.");
 
             try
             {
@@ -476,9 +513,11 @@ namespace TermFlow.Components.FullScreen
         /// </summary>
         /// <param name="token">Token de cancelación.</param>
         /// <returns><see cref="ConsoleKeyInfo"/> leída o <c>default</c> si se cancela.</returns>
+        /// <exception cref="InvalidOperationException">Se llama cuando el panel no está activo.</exception>
         internal static ConsoleKeyInfo WaitForKey(CancellationToken token = default)
         {
-            if (!_isActive) return default;
+            if (!_isActive)
+                throw new InvalidOperationException("No se puede esperar una tecla, el LivePanel no está activo.");
 
             try
             {
@@ -497,7 +536,7 @@ namespace TermFlow.Components.FullScreen
         /// para evitar que teclas presionadas anteriormente (input fantasma) sean procesadas en el nuevo contexto.
         /// Si el panel no está activo, la función no hace nada.
         /// </remarks>
-        internal static void ClearKeysQueue()
+        public static void ClearKeysQueue()
         {
             if (!_isActive) return;
 

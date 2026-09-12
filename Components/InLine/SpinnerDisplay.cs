@@ -3,6 +3,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using TermFlow.Base;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
@@ -30,8 +31,7 @@ namespace TermFlow.Components.InLine
         {
             using var internalCts = CancellationTokenSource.CreateLinkedTokenSource(token);
             string[] frames = DefaultFrames;
-
-            long _panelId = LivePanel.IsActive ? panelId ?? LivePanel.AddDynamic($"{description} spinning...") : -1;
+            var console = new FlowBridge(panelId: panelId);
 
             // Hilo de renderizado de la animación
             Task renderTask = Task.Run(async () =>
@@ -46,10 +46,7 @@ namespace TermFlow.Components.InLine
                         string line = $"{ThemeColors.Warning}{frames[frameIndex]}{ThemeColors.Reset} {description}";
                         if (line != oldLine)
                         {
-                            if (LivePanel.IsActive)
-                                LivePanel.UpdateLine(_panelId, line);
-                            else
-                                Console.Write($"\r{line}\x1b[K");
+                            console.Write(line);
                             oldLine = line;
                         }
 
@@ -76,10 +73,7 @@ namespace TermFlow.Components.InLine
                 await renderTask;
 
                 string line = $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} " + (finalText ?? $"{ThemeColors.Success}{description} {ThemeColors.Dim}(Completado){ThemeColors.Reset}");
-                if (LivePanel.IsActive)
-                    LivePanel.UpdateLine(_panelId, line);
-                else
-                    Console.Write($"\r{line}\x1b[K\n");
+                console.Write(line, true);
             }
         }
     }

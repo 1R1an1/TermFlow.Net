@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 1R1an1 */
-using System;
+using TermFlow.Base;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
@@ -101,11 +101,6 @@ namespace TermFlow.Components.InLine
         /// </summary>
         /// <param name="message">Mensaje ya formateado a imprimir.</param>
         private static void WriteToOutput(string message)
-        {
-            if (LivePanel.IsActive)
-                LivePanel.AddLog(message);
-            else
-                Console.WriteLine("\r\x1b[K" + message);
-        }
+            => FlowBridge.WriteIndependient(message, true, null);
     }
 }
