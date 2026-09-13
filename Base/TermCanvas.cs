@@ -17,7 +17,7 @@ namespace TermFlow.Base;
 /// Implementa renderizado diferencial (Dirty Tracking), actualizando únicamente 
 /// las celdas que cambiaron desde el último frame para maximizar el rendimiento.
 /// </summary>
-public class TermCanvas : IDisposable
+public class TermCanvas : IDisposable, ICanvas
 {
     /// <summary>
     /// Representa una celda individual del canvas virtual en memoria.
@@ -592,6 +592,22 @@ public class TermCanvas : IDisposable
                 _pendingClearScreen = (x, y);
         }
     }
+
+
+    /// <summary>
+    /// Crea un <see cref="VirtualCanvas"/> dentro de este canvas, desde (x1, y1) hasta (x2, y2),
+    /// ambos inclusivos. El canvas virtual dibuja sobre ese rectángulo de este canvas:
+    /// no tiene buffers propios ni Flush propio.
+    /// </summary>
+    /// <param name="x1">Columna base 0 donde empieza.</param>
+    /// <param name="y1">Fila base 0 donde empieza.</param>
+    /// <param name="x2">Columna base 0 donde termina (inclusive).</param>
+    /// <param name="y2">Fila base 0 donde termina (inclusive).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si alguna coordenada es negativa o el
+    /// rectángulo se sale del canvas.</exception>
+    /// <returns>El canvas virtual creado.</returns>
+    public VirtualCanvas CreateSubCanvas(int x1, int y1, int x2, int y2)
+        => new(this, x1, y1, x2, y2);
 
     /// <summary>
     /// Libera los recursos usados por el canvas, deteniendo el monitor de resize si está activo.

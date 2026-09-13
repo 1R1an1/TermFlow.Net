@@ -24,7 +24,7 @@ public static class CanvasExt
     /// <exception cref="ArgumentNullException">Si <paramref name="canvas"/> es <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Si las coordenadas son negativas.</exception>
     /// <exception cref="ArgumentException">Si el ancho o alto resultante es menor a 2.</exception>
-    public static void DrawBorder(this TermCanvas canvas, int x1, int y1, int x2, int y2, AnsiColor color = null)
+    public static void DrawBorder(this ICanvas canvas, int x1, int y1, int x2, int y2, AnsiColor color = null)
     {
         ArgumentNullException.ThrowIfNull(canvas);
 
@@ -71,7 +71,7 @@ public static class CanvasExt
     /// </param>
     /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> o <paramref name="y"/> están fuera del canvas.</exception>
-    public static void WriteAtAndClear(this TermCanvas canvas, int x, int y, string text, AnsiColor color = null, int length = 0)
+    public static void WriteAtAndClear(this ICanvas canvas, int x, int y, string text, AnsiColor color = null, int length = 0)
     {
         ArgumentNullException.ThrowIfNull(canvas);
 
@@ -93,8 +93,10 @@ public static class CanvasExt
     /// <param name="title">Texto del título.</param>
     /// <param name="titleColor">Color del título.</param>
     /// <param name="lineColor">Color del subrayado (si es null, usa el mismo del título).</param>
-    public static void WriteHeader(this TermCanvas canvas, int x, int y, string title, AnsiColor titleColor = null, AnsiColor lineColor = null)
+    public static void WriteHeader(this ICanvas canvas, int x, int y, string title, AnsiColor titleColor = null, AnsiColor lineColor = null)
     {
+        ArgumentNullException.ThrowIfNull(canvas);
+
         // 1. Escribimos el título
         canvas.WriteAt(x, y, title, titleColor);
 
@@ -115,7 +117,7 @@ public static class CanvasExt
     /// <param name="bottomToTop">Si es true, dibuja hacia arriba. Si es false, hacia abajo.</param>
     /// <param name="startIndex">Índice desde el cual empezar a dibujar.</param>
     /// <param name="formatter">Función que recibe el string y su índice, y devuelve el string formateado.</param>
-    public static void DrawList<T>(this TermCanvas canvas, IReadOnlyList<T> items, int x, int y, int maxItems = -1, int startIndex = 0, bool bottomToTop = false, Func<T, int, string> formatter = null)
+    public static void DrawList<T>(this ICanvas canvas, IReadOnlyList<T> items, int x, int y, int maxItems = -1, int startIndex = 0, bool bottomToTop = false, Func<T, int, string> formatter = null)
     {
         ArgumentNullException.ThrowIfNull(canvas);
         ArgumentNullException.ThrowIfNull(items);
