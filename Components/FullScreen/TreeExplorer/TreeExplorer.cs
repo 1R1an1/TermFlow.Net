@@ -152,7 +152,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="token">Token de cancelación.</param>
         /// <returns>Array de rutas marcadas o vacío si se cancela.</returns>
-        public static async Task<string[]> ExploreMultiAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default)
+        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default)
             => await ExploreMultiAsync(title, dataSource: new PhysicalDataSource(rootDir, options), options, token: token);
 
         /// <summary>
@@ -176,7 +176,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="token">Token de cancelación.</param>
         /// <returns>Array de rutas virtuales marcadas o vacío si se cancela.</returns>
-        public static async Task<string[]> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default)
+        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default)
             => await ExploreMultiAsync(title, dataSource: new VirtualDataSource(virtualPaths, options, virtualRoot), options, token: token);
 
         /// <summary>
@@ -209,7 +209,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="initialPath">Subruta inicial opcional dentro de <paramref name="dataSource"/>.</param>
         /// <param name="token">Token de cancelación.</param>
         /// <returns>Array de rutas marcadas o vacío si se cancela.</returns>
-        public static async Task<string[]> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default)
+        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default)
         {
             Engine.EnterFullScreen();
             try
@@ -260,7 +260,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="initialPath">Subruta inicial opcional.</param>
         /// <param name="token">Token de cancelación.</param>
         /// <returns>Array de rutas seleccionadas (vacío si se cancela).</returns>
-        private static async Task<string[]> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerOptions? optionsNull, string initialPath, CancellationToken token)
+        private static async Task<IReadOnlyList<string>> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerOptions? optionsNull, string initialPath, CancellationToken token)
         {
             optionsNull ??= new();
             var options = optionsNull.Value;

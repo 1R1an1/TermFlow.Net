@@ -31,12 +31,12 @@ namespace TermFlow.Components.FullScreen
         /// <param name="startIndex">Índice inicial donde empezará el cursor antes de filtrar.</param>
         /// <param name="token">Token para cancelar la operación.</param>
         /// <returns>Índice original del ítem elegido, o -1 si el usuario cancela.</returns>
-        public static async Task<int> FilterOneAsync(string title, string[] items, int startIndex = 0, CancellationToken token = default)
+        public static async Task<int> FilterOneAsync(string title, IReadOnlyList<string> items, int startIndex = 0, CancellationToken token = default)
         {
             if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
             else isSearchListRunning = true;
 
-            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
+            if (startIndex < 0 || startIndex >= items.Count) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -67,12 +67,12 @@ namespace TermFlow.Components.FullScreen
         /// <param name="startIndex">Índice inicial donde empezará el cursor antes de filtrar.</param>
         /// <param name="token">Token para cancelar la operación.</param>
         /// <returns>Arreglo con los índices originales marcados al confirmar, o vacío si el usuario cancela.</returns>
-        public static async Task<int[]> FilterMultiAsync(string title, string[] items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default)
+        public static async Task<int[]> FilterMultiAsync(string title, IReadOnlyList<string> items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default)
         {
             if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
             else isSearchListRunning = true;
 
-            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
+            if (startIndex < 0 || startIndex >= items.Count) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -83,7 +83,7 @@ namespace TermFlow.Components.FullScreen
                 HashSet<int> selectedMap = new HashSet<int>();
                 if (preselected != null)
                     for (int i = 0; i < preselected.Length; i++)
-                        if (i < items.Length && preselected[i]) selectedMap.Add(i);
+                        if (i < items.Count && preselected[i]) selectedMap.Add(i);
 
                 var router = new InputRouter(false)
                     .BindCancel(() => { result = Array.Empty<int>(); _exit = true; })
@@ -118,7 +118,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="router">Enrutador de input configurado.</param>
         /// <param name="token">Token de cancelación.</param>
         /// <param name="startIndex">Índice inicial del cursor.</param>
-        private static async Task RunSearchEngine(string title, string[] items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex, Action OnConfirm)
+        private static async Task RunSearchEngine(string title, IReadOnlyList<string> items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex, Action OnConfirm)
         {
             ScrollState layout = new ScrollState();
             bool shouldRender = true;
@@ -154,7 +154,7 @@ namespace TermFlow.Components.FullScreen
             {
                 // Filtrado dinámico
                 filtered.Clear();
-                for (int i = 0; i < items.Length; i++)
+                for (int i = 0; i < items.Count; i++)
                     if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
                         filtered.Add((items[i], i));
 

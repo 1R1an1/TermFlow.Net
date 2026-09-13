@@ -159,11 +159,11 @@ internal class Program
     private static async Task TestMenuMulti()
     {
         string[] items = ["Lectura", "Escritura", "Ejecución", "Acceso de red", "Acceso admin"];
-        int[] sel = await Menu.SelectMultiAsync($"{ThemeColors.Primary}Selección múltiple (permisos){ThemeColors.Reset}", items);
-        if (sel.Length == 0) TextViewer.Warn("No marcaste nada");
+        IReadOnlyList<int> sel = await Menu.SelectMultiAsync($"{ThemeColors.Primary}Selección múltiple (permisos){ThemeColors.Reset}", items);
+        if (sel.Count == 0) TextViewer.Warn("No marcaste nada");
         else
         {
-            TextViewer.Success($"Marcaste {sel.Length} ítems:");
+            TextViewer.Success($"Marcaste {sel.Count} ítems:");
             foreach (int i in sel)
                 TextViewer.Info($"  → [{i}] {items[i]}");
         }
@@ -219,12 +219,12 @@ internal class Program
     {
         string inicio = Directory.GetCurrentDirectory();
         ThemeColors.Selector = ThemeColors.Primary;
-        string[] rutas = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Seleccionar múltiples (físico){ThemeColors.Reset}", inicio);
+        IReadOnlyList<string> rutas = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Seleccionar múltiples (físico){ThemeColors.Reset}", inicio);
         ThemeColors.Selector = ThemeColors.Bright;
-        if (rutas.Length == 0) TextViewer.Warn("Sin selección");
+        if (rutas.Count == 0) TextViewer.Warn("Sin selección");
         else
         {
-            TextViewer.Success($"Elegiste {rutas.Length} rutas:");
+            TextViewer.Success($"Elegiste {rutas.Count} rutas:");
             foreach (string r in rutas)
                 TextViewer.Info($"  → {r}");
         }
@@ -242,12 +242,12 @@ internal class Program
             "rds/staging-db"
         };
         ThemeColors.Selector = ThemeColors.Primary;
-        string[] sel = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Recursos virtuales{ThemeColors.Reset}", rutas, virtualRoot: "aws");
+        IReadOnlyList<string> sel = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Recursos virtuales{ThemeColors.Reset}", rutas, virtualRoot: "aws");
         ThemeColors.Selector = ThemeColors.Bright;
-        if (sel.Length == 0) TextViewer.Warn("Sin selección");
+        if (sel.Count == 0) TextViewer.Warn("Sin selección");
         else
         {
-            TextViewer.Success($"Elegiste {sel.Length}:");
+            TextViewer.Success($"Elegiste {sel.Count}:");
             foreach (string r in sel)
                 TextViewer.Info($"  → {r}");
         }

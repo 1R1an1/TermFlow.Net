@@ -34,12 +34,12 @@ namespace TermFlow.Components.FullScreen
         /// <param name="items">Lista de opciones a elegir.</param>
         /// <param name="token">Token para cancelar la selección.</param>
         /// <returns>Índice del item elegido, o -1 si el usuario cancela (Esc/q).</returns>
-        public static async Task<int> SelectOneAsync(string title, string[] items, int startIndex = 0, CancellationToken token = default)
+        public static async Task<int> SelectOneAsync(string title, IReadOnlyList<string> items, int startIndex = 0, CancellationToken token = default)
         {
             if (isMenuRunning) throw new InvalidOperationException("Ya hay un Menu activo");
             else isMenuRunning = true;
 
-            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
+            if (startIndex < 0 || startIndex >= items.Count) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -65,12 +65,12 @@ namespace TermFlow.Components.FullScreen
         /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
         /// <param name="token">Token para cancelar la selección.</param>
         /// <returns>Arreglo con los índices marcados al confirmar (ordenado), o vacío si el usuario cancela.</returns>
-        public static async Task<int[]> SelectMultiAsync(string title, string[] items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default)
+        public static async Task<IReadOnlyList<int>> SelectMultiAsync(string title, IReadOnlyList<string> items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default)
         {
             if (isMenuRunning) throw new InvalidOperationException("Ya hay un Menu activo");
             else isMenuRunning = true;
 
-            if (startIndex < 0 || startIndex >= items.Length) throw new ArgumentOutOfRangeException(nameof(startIndex));
+            if (startIndex < 0 || startIndex >= items.Count) throw new ArgumentOutOfRangeException(nameof(startIndex));
 
             Engine.EnterFullScreen();
             try
@@ -80,7 +80,7 @@ namespace TermFlow.Components.FullScreen
                 HashSet<int> selectedMap = new HashSet<int>();
                 if (preselected != null)
                     for (int i = 0; i < preselected.Length; i++)
-                        if (i < items.Length && preselected[i]) selectedMap.Add(i);
+                        if (i < items.Count && preselected[i]) selectedMap.Add(i);
 
                 var router = new InputRouter()
                     .BindSelect(() =>
@@ -112,7 +112,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
         /// <param name="router">Enrutador de input configurado.</param>
         /// <param name="token">Token de cancelación.</param>
-        private static async Task RunMenuEngine(string title, string[] items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex)
+        private static async Task RunMenuEngine(string title, IReadOnlyList<string> items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex)
         {
             ScrollState layout = new ScrollState();
             bool shouldRender = true;
@@ -122,19 +122,19 @@ namespace TermFlow.Components.FullScreen
             _exit = false;
 
             router.BindNavigate(
-                        () => { if (items.Length > 0) _cursor = (_cursor - 1 + items.Length) % items.Length; },
-                        () => { if (items.Length > 0) _cursor = (_cursor + 1) % items.Length; }
+                        () => { if (items.Count > 0) _cursor = (_cursor - 1 + items.Count) % items.Count; },
+                        () => { if (items.Count > 0) _cursor = (_cursor + 1) % items.Count; }
                     )
                     .BindScroll(
-                        () => { if (items.Length > 0) _cursor = (_cursor - 1 + items.Length) % items.Length; },
-                        () => { if (items.Length > 0) _cursor = (_cursor + 1) % items.Length; }
+                        () => { if (items.Count > 0) _cursor = (_cursor - 1 + items.Count) % items.Count; },
+                        () => { if (items.Count > 0) _cursor = (_cursor + 1) % items.Count; }
                     )
                     .BindChar("g/G", "extremos", () => _cursor = 0, 'g')
-                    .BindChar("", "", () => _cursor = items.Length - 1, 'G');
+                    .BindChar("", "", () => _cursor = items.Count - 1, 'G');
 
             while (!token.IsCancellationRequested && !_exit)
             {
-                if (layout.Update(_cursor, items.Length, ReservedRows))
+                if (layout.Update(_cursor, items.Count, ReservedRows))
                     shouldRender = true;
 
                 if (shouldRender)
@@ -164,14 +164,14 @@ namespace TermFlow.Components.FullScreen
         /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox y marca los ítems incluidos.</param>
         /// <param name="router">Enrutador de input encargado de renderizar el footer contextual.</param>
-        private static void RenderMenu(TermCanvas canvas, string title, string[] items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
+        private static void RenderMenu(TermCanvas canvas, string title, IReadOnlyList<string> items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router)
         {
             canvas.Resize(Console.WindowWidth, Console.WindowHeight);
 
             // Cabecera
             canvas.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
 
-            int end = Math.Min(items.Length, scroll + visibleRows);
+            int end = Math.Min(items.Count, scroll + visibleRows);
 
             // Indicador superior
             if (scroll > 0) canvas.WriteAtAndClear(2, 3, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
@@ -194,7 +194,7 @@ namespace TermFlow.Components.FullScreen
                     return $"  {checkPrefix}{ThemeColors.Dim}{item}{ThemeColors.Reset}";
             });
 
-            int remaining = items.Length - end;
+            int remaining = items.Count - end;
             if (remaining > 0) canvas.WriteAtAndClear(2, canvas.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
             else canvas.ClearLine(canvas.Height - 3);
 
