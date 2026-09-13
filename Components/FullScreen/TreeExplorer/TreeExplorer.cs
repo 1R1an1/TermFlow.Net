@@ -95,7 +95,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                 else
                     TraverseUniversal(path, source, filter, marked, unmarkedExceptions, resolved);
             }
-            return resolved.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
+            return resolved.Distinct(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToArray();
         }
 
         /// <summary>
@@ -275,19 +275,19 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             bool shouldRender = true;
             using var canvas = new TermCanvas(true, false, 100, (_, _) => shouldRender = true);
 
-            HashSet<string> marked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            HashSet<string> unmarkedExceptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> marked = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+            HashSet<string> unmarkedExceptions = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
 
             List<ExplorerEntry> entries = isBlocked ? new() : await FetchEntriesAsync(dataSource, currentNode, token);
             if (options.HiddenPaths.Count > 0)
                 entries = entries.Where(e => !options.HiddenPaths.Contains(e.Id)).ToList();
 
             // Recuerda la posición del cursor al salir de un directorio
-            var cursorMemory = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var cursorMemory = new Dictionary<string, int>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
             string _pendingBackTarget = null;
 
             // Recuerda la posición del scroll (viewport) al salir
-            var layoutMemory = new Dictionary<string, ScrollState>(StringComparer.OrdinalIgnoreCase);
+            var layoutMemory = new Dictionary<string, ScrollState>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
 
             bool exit = false;
             string[] result = Array.Empty<string>();

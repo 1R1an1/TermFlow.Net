@@ -144,13 +144,13 @@ public readonly record struct ExplorerOptions
     /// Conjunto de rutas a las que el usuario no puede acceder (entrar).
     /// Si intenta entrar a una de estas rutas, se mostrará el mensaje "(Carpeta bloqueada)".
     /// </summary>
-    public readonly HashSet<string> DeniedPaths { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    public readonly HashSet<string> DeniedPaths { get; init; } = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Conjunto de rutas que directamente no aparecerán en el listado de entradas.
     /// Útil para ocultar carpetas o archivos específicos del árbol visible.
     /// </summary>
-    public readonly HashSet<string> HiddenPaths { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    public readonly HashSet<string> HiddenPaths { get; init; } = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
 
     public ExplorerOptions() { }
 }
