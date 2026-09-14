@@ -279,7 +279,7 @@ public class TermCanvas : IDisposable, ICanvas
     /// <param name="text">Texto a escribir (puede contener ANSI).</param>
     /// <param name="color">Color inicial por defecto.</param>
     /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango del canvas.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango del canvas o si <paramref name="x"/> es negativo.</exception>
     public void WriteAt(int x, int y, string text, AnsiColor color = null)
         => WriteInternal(x, y, text, color, isVertical: false);
 
@@ -293,23 +293,37 @@ public class TermCanvas : IDisposable, ICanvas
     /// <param name="text">Texto a escribir verticalmente (cada carácter en una línea).</param>
     /// <param name="color">Color inicial por defecto.</param>
     /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> está fuera del rango del canvas.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> está fuera del rango del canvas o si <paramref name="y"/> es negativo.</exception>
     public void WriteVertical(int x, int y, string text, AnsiColor color = null)
         => WriteInternal(x, y, text, color, isVertical: true);
 
     /// <summary>
-    /// Lógica interna compartida para escribir texto de forma horizontal o vertical.
-    /// No toma el lock.
+    /// Lógica interna compartida para escribir texto horizontal o vertical.
+    /// La coordenada fija no puede salirse del canvas y la que avanza no puede ser negativa
+    /// y se recorta en <paramref name="clip"/>.
     /// </summary>
     /// <param name="x">Columna base 0 donde empezar a escribir.</param>
-    /// <param name="y">Fila base 0 donde comenzar a escribir verticalmente.</param>
-    /// <param name="text">Texto a escribir verticalmente (cada carácter en una línea).</param>
+    /// <param name="y">Fila base 0 donde empezar a escribir.</param>
+    /// <param name="text">Texto a escribir (puede contener ANSI).</param>
     /// <param name="color">Color inicial por defecto.</param>
-    private void WriteInternal(int x, int y, string text, AnsiColor color, bool isVertical)
+    /// <param name="isVertical"><c>true</c> escribe en vertical, <c>false</c> en horizontal.</param>
+    /// <param name="clip">Última celda (inclusive) en el eje que avanza: X si es horizontal, Y si es vertical. <c>int.MaxValue</c> = sin recorte.</param>
+    /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
+    private void WriteInternal(int x, int y, string text, AnsiColor color, bool isVertical, int clip = int.MaxValue)
     {
         ArgumentNullException.ThrowIfNull(text);
-        if (isVertical) { if (x < 0 || x >= _width) throw new ArgumentOutOfRangeException(nameof(x), "La columna X está fuera del canvas."); }
-        else { if (y < 0 || y >= _height) throw new ArgumentOutOfRangeException(nameof(y), "La fila Y está fuera del canvas."); }
+
+        // La coordenada FIJA se valida por rango; la que AVANZA no puede ser negativa
+        if (isVertical)
+        {
+            if (x < 0 || x >= _width) throw new ArgumentOutOfRangeException(nameof(x), "La columna X está fuera del canvas.");
+            if (y < 0) throw new ArgumentOutOfRangeException(nameof(y), "La fila Y no puede ser negativa.");
+        }
+        else
+        {
+            if (y < 0 || y >= _height) throw new ArgumentOutOfRangeException(nameof(y), "La fila Y está fuera del canvas.");
+            if (x < 0) throw new ArgumentOutOfRangeException(nameof(x), "La columna X no puede ser negativa.");
+        }
 
         string currentColorCode = color ?? ThemeColors.Reset;
         int currentX = x;
@@ -335,20 +349,35 @@ public class TermCanvas : IDisposable, ICanvas
                     {
                         if (isVertical)
                         {
-                            if (currentY >= 0 && currentY < _height)
+                            if (currentY < _height && currentY <= clip)
                                 SetCell(currentX, currentY, c, currentColorCode);
-                            currentY++; // Avanzamos verticalmente
+                            currentY++;
                         }
                         else
                         {
-                            if (currentX >= 0 && currentX < _width)
+                            if (currentX < _width && currentX <= clip)
                                 SetCell(currentX, currentY, c, currentColorCode);
-                            currentX++; // Avanzamos horizontalmente
+                            currentX++;
                         }
                     }
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Igual que <see cref="WriteAt"/>/<see cref="WriteVertical"/>, pero con la escritura recortada
+    /// en <paramref name="clip"/> (celda inclusive) sobre el eje que avanza, en coordenadas absolutas.
+    /// Lo usa <see cref="VirtualCanvas"/> para escribir dentro de su área.
+    /// </summary>
+    internal void WriteClipped(int x, int y, string text, AnsiColor color, bool isVertical, int clip)
+    {
+        // La coordenada fija afuera del canvas = el padre se achicó y el sub quedó
+        // afuera: no-op silencioso en vez de excepción a mitad del render
+        if (isVertical) { if (x < 0 || x >= _width) return; }
+        else if (y < 0 || y >= _height) return;
+
+        WriteInternal(x, y, text, color, isVertical, clip);
     }
 
     /// <summary>

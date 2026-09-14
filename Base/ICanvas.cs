@@ -27,7 +27,7 @@ public interface ICanvas
     /// <param name="text">Texto a escribir (puede contener ANSI).</param>
     /// <param name="color">Color inicial por defecto.</param>
     /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango de la superficie.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango de la superficie o si <paramref name="x"/> es negativo.</exception>
     public void WriteAt(int x, int y, string text, AnsiColor color = null);
 
     /// <summary>
@@ -41,7 +41,7 @@ public interface ICanvas
     /// <param name="text">Texto a escribir verticalmente (cada carácter en una línea).</param>
     /// <param name="color">Color inicial por defecto.</param>
     /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> está fuera del rango de la superficie.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> está fuera del rango de la superficie o si <paramref name="y"/> es negativo.</exception>
     public void WriteVertical(int x, int y, string text, AnsiColor color = null);
 
     /// <summary>

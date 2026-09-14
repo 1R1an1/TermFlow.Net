@@ -104,14 +104,14 @@ public sealed class VirtualCanvas : ICanvas
     /// <param name="text">Texto a escribir (puede contener ANSI).</param>
     /// <param name="color">Color inicial por defecto.</param>
     /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango del canvas virtual.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="y"/> está fuera del rango del canvas virtual o si <paramref name="x"/> es negativo.</exception>
     public void WriteAt(int x, int y, string text, AnsiColor color = null)
     {
         ArgumentNullException.ThrowIfNull(text);
-        if (y < 0 || y >= Height)
-            throw new ArgumentOutOfRangeException(nameof(y), "La fila Y está fuera del sub-canvas.");
+        if (y < 0 || y >= Height) throw new ArgumentOutOfRangeException(nameof(y), "La fila Y está fuera del sub-canvas.");
+        if (x < 0) throw new ArgumentOutOfRangeException(nameof(x), "La columna X no puede ser negativa.");
 
-        _parent.WriteAt(X + x, Y + y, text, color);
+        _parent.WriteClipped(X + x, Y + y, text, color, false, X + Width - 1);
     }
 
     /// <summary>
@@ -125,14 +125,14 @@ public sealed class VirtualCanvas : ICanvas
     /// <param name="text">Texto a escribir verticalmente (cada carácter en una línea).</param>
     /// <param name="color">Color inicial por defecto.</param>
     /// <exception cref="ArgumentNullException">Si <paramref name="text"/> es <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> está fuera del rango del canvas virtual.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="x"/> está fuera del rango del canvas virtual o si <paramref name="y"/> es negativo.</exception>
     public void WriteVertical(int x, int y, string text, AnsiColor color = null)
     {
         ArgumentNullException.ThrowIfNull(text);
-        if (x < 0 || x >= Width)
-            throw new ArgumentOutOfRangeException(nameof(x), "La columna X está fuera del sub-canvas.");
+        if (x < 0 || x >= Width) throw new ArgumentOutOfRangeException(nameof(x), "La columna X está fuera del sub-canvas.");
+        if (y < 0) throw new ArgumentOutOfRangeException(nameof(y), "La fila Y no puede ser negativa.");
 
-        _parent.WriteVertical(X + x, Y + y, text, color);
+        _parent.WriteClipped(X + x, Y + y, text, color, true, Y + Height - 1);
     }
 
     /// <summary>Limpia todo el sub-canvas.</summary>
