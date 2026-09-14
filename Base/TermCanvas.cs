@@ -390,6 +390,8 @@ public class TermCanvas : IDisposable, ICanvas
             // Si se pidió un Clear o Resize, mandamos el comando ANSI de borrar todo.
             if (_forceClearScreen)
             {
+                sb.Append(ThemeColors.Reset);
+                _cursorColor = ThemeColors.Reset;
                 sb.Append("\x1b[2J"); // Borrar pantalla
                 _forceClearScreen = false;
             }
@@ -409,6 +411,8 @@ public class TermCanvas : IDisposable, ICanvas
                     // --- INYECCIÓN DEL COMANDO \x1b[J ---
                     if (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y == y)
                     {
+                        sb.Append(ThemeColors.Reset);
+                        _cursorColor = ThemeColors.Reset;
                         // Posicionamos el cursor en (X, Y) y mandamos el ANSI J
                         sb.Append($"\x1b[{y + 1};{_pendingClearScreen.Value.X + 1}H\x1b[J");
                         _pendingClearScreen = null;
@@ -416,6 +420,8 @@ public class TermCanvas : IDisposable, ICanvas
                     // --- INYECCIÓN DEL COMANDO \x1b[K (Si lo hubiera para esta línea) ---
                     if (_pendingClearLineX.TryGetValue(y, out int clearX))
                     {
+                        sb.Append(ThemeColors.Reset);
+                        _cursorColor = ThemeColors.Reset;
                         sb.Append($"\x1b[{y + 1};{clearX + 1}H\x1b[K");
                         _pendingClearLineX.Remove(y);
                     }

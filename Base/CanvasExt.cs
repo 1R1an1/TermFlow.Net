@@ -20,7 +20,6 @@ public static class CanvasExt
     /// <param name="x2">Columna final base 0.</param>
     /// <param name="y2">Fila final base 0.</param>
     /// <param name="color">Color del borde.</param>
-    /// <param name="color">Color del borde.</param>
     /// <exception cref="ArgumentNullException">Si <paramref name="canvas"/> es <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Si las coordenadas son negativas.</exception>
     /// <exception cref="ArgumentException">Si el ancho o alto resultante es menor a 2.</exception>
@@ -54,6 +53,38 @@ public static class CanvasExt
         canvas.WriteAt(x2, y1, ConsoleGlyphs.TopRight.ToString(), color);
         canvas.WriteAt(x1, y2, ConsoleGlyphs.BottomLeft.ToString(), color);
         canvas.WriteAt(x2, y2, ConsoleGlyphs.BottomRight.ToString(), color);
+    }
+
+    /// <summary>
+    /// Rellena un área rectangular con un carácter y color, desde (x1, y1) hasta (x2, y2).
+    /// Las coordenadas invertidas se ordenan y el área se recorta a los bordes del canvas.
+    /// </summary>
+    /// <param name="canvas">Instancia del canvas.</param>
+    /// <param name="x1">Columna inicial base 0.</param>
+    /// <param name="y1">Fila inicial base 0.</param>
+    /// <param name="x2">Columna final base 0 (inclusive).</param>
+    /// <param name="y2">Fila final base 0 (inclusive).</param>
+    /// <param name="fillChar">Carácter con el que rellenar el área.</param>
+    /// <param name="fillColor">Color del carácter.</param>
+    /// <exception cref="ArgumentNullException">Si <paramref name="canvas"/> es <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Si alguna coordenada es negativa.</exception>
+    public static void Fill(this ICanvas canvas, int x1, int y1, int x2, int y2, char fillChar, AnsiColor fillColor = null)
+    {
+        ArgumentNullException.ThrowIfNull(canvas);
+
+        if (x1 < 0 || y1 < 0 || x2 < 0 || y2 < 0)
+            throw new ArgumentOutOfRangeException("Las coordenadas no pueden ser negativas.");
+
+        // Ordenamos las coordenadas por si están invertidas
+        if (x1 > x2) (x1, x2) = (x2, x1);
+        if (y1 > y2) (y1, y2) = (y2, y1);
+
+        if (x1 > x2 || y1 > y2) return;
+
+        // La fila se arma una sola vez y se reutiliza para todas
+        string row = new string(fillChar, x2 - x1 + 1);
+        for (int y = y1; y <= y2; y++)
+            canvas.WriteAt(x1, y, row, fillColor);
     }
 
     /// <summary>

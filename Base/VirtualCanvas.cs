@@ -49,8 +49,10 @@ public sealed class VirtualCanvas : ICanvas
         if (y1 > y2) (y1, y2) = (y2, y1);
 
         // El rectángulo tiene que entrar en el padre
-        if (x2 >= parent.Width || y2 >= parent.Height)
-            throw new ArgumentOutOfRangeException("El rectángulo se sale del canvas padre.");
+        if (y2 >= parent.Height)
+            throw new ArgumentOutOfRangeException(nameof(y2), "El rectángulo se sale del canvas padre.");
+        if (x2 >= parent.Width)
+            throw new ArgumentOutOfRangeException(nameof(x2), "El rectángulo se sale del canvas padre.");
 
 
         _parent = parent;
@@ -218,8 +220,7 @@ public sealed class VirtualCanvas : ICanvas
     }
 
     /// <summary>
-    /// Redimensiona el canvas virtual manteniendo su posición (X, Y), limpiando antes el
-    /// rectángulo viejo para que no quede contenido dibujado fuera del nuevo borde.
+    /// Redimensiona el canvas virtual manteniendo su posición (X, Y).
     /// El nuevo tamaño debe seguir entrando dentro del canvas padre.
     /// </summary>
     /// <param name="newWidth">Nuevo ancho, en celdas.</param>
@@ -236,9 +237,6 @@ public sealed class VirtualCanvas : ICanvas
         if (X + newWidth > _parent.Width || Y + newHeight > _parent.Height)
             throw new ArgumentOutOfRangeException("El nuevo tamaño se sale del canvas padre.");
 
-        // Limpiamos el rectángulo viejo antes de cambiar el tamaño
-        ClearArea(0, 0, Width - 1, Height - 1);
-
         Width = newWidth;
         Height = newHeight;
     }
@@ -246,7 +244,6 @@ public sealed class VirtualCanvas : ICanvas
     /// <summary>
     /// Redimensiona y/o mueve el canvas virtual al rectángulo indicado, en coordenadas absolutas
     /// del padre (ambas esquinas inclusivas, igual que <see cref="TermCanvas.CreateSubCanvas(int,int,int,int)"/>).
-    /// Limpia el rectángulo viejo para que no quede contenido en la posición anterior.
     /// </summary>
     /// <param name="x1">Columna absoluta base 0 donde empieza.</param>
     /// <param name="y1">Fila absoluta base 0 donde empieza.</param>
@@ -262,16 +259,14 @@ public sealed class VirtualCanvas : ICanvas
         if (x1 > x2) (x1, x2) = (x2, x1);
         if (y1 > y2) (y1, y2) = (y2, y1);
 
-        if (x2 >= _parent.Width || y2 >= _parent.Height)
-            throw new ArgumentOutOfRangeException("El rectángulo se sale del canvas padre.");
+        if (y2 >= _parent.Height)
+            throw new ArgumentOutOfRangeException(nameof(y2), "El rectángulo se sale del canvas padre.");
+        if (x2 >= _parent.Width)
+            throw new ArgumentOutOfRangeException(nameof(x2), "El rectángulo se sale del canvas padre.");
 
         int newWidth = x2 - x1 + 1;
         int newHeight = y2 - y1 + 1;
         if (x1 == X && y1 == Y && newWidth == Width && newHeight == Height) return; // mismo rectángulo
-
-        // Limpiamos el rectángulo VIEJO (con posición/tamaño actuales)
-        // para que no quede contenido dibujado en el lugar anterior
-        ClearArea(0, 0, Width - 1, Height - 1);
 
         X = x1;
         Y = y1;
