@@ -140,9 +140,10 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="rootDir">Ruta física raíz a explorar.</param>
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Ruta elegida o <see cref="string.Empty"/> si se cancela.</returns>
-        public static async Task<string> ExploreOneAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default)
-            => await ExploreOneAsync(title, dataSource: new PhysicalDataSource(rootDir, options), options, token: token);
+        public static async Task<string> ExploreOneAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
+            => await ExploreOneAsync(title, dataSource: new PhysicalDataSource(rootDir, options), options, token: token, style: style);
 
         /// <summary>
         /// Atajo para explorar un directorio físico con selección múltiple.
@@ -151,9 +152,10 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="rootDir">Ruta física raíz a explorar.</param>
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Array de rutas marcadas o vacío si se cancela.</returns>
-        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default)
-            => await ExploreMultiAsync(title, dataSource: new PhysicalDataSource(rootDir, options), options, token: token);
+        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
+            => await ExploreMultiAsync(title, dataSource: new PhysicalDataSource(rootDir, options), options, token: token, style: style);
 
         /// <summary>
         /// Atajo para explorar un conjunto de rutas virtuales con selección única.
@@ -163,9 +165,10 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="virtualRoot">Nombre a usar como nodo raíz virtual.</param>
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Ruta virtual elegida o <see cref="string.Empty"/> si se cancela.</returns>
-        public static async Task<string> ExploreOneAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default)
-            => await ExploreOneAsync(title, dataSource: new VirtualDataSource(virtualPaths, options, virtualRoot), options, token: token);
+        public static async Task<string> ExploreOneAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
+            => await ExploreOneAsync(title, dataSource: new VirtualDataSource(virtualPaths, options, virtualRoot), options, token: token, style: style);
 
         /// <summary>
         /// Atajo para explorar un conjunto de rutas virtuales con selección múltiple.
@@ -175,9 +178,10 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="virtualRoot">Nombre a usar como nodo raíz virtual.</param>
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Array de rutas virtuales marcadas o vacío si se cancela.</returns>
-        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default)
-            => await ExploreMultiAsync(title, dataSource: new VirtualDataSource(virtualPaths, options, virtualRoot), options, token: token);
+        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
+            => await ExploreMultiAsync(title, dataSource: new VirtualDataSource(virtualPaths, options, virtualRoot), options, token: token, style: style);
 
         /// <summary>
         /// Exploración de selección única contra un <see cref="IExplorerDataSource"/> arbitrario.
@@ -187,13 +191,14 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="initialPath">Subruta inicial opcional dentro de <paramref name="dataSource"/>.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Ruta elegida o <see cref="string.Empty"/> si se cancela.</returns>
-        public static async Task<string> ExploreOneAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default)
+        public static async Task<string> ExploreOneAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default, Styles? style = null)
         {
             Engine.EnterFullScreen();
             try
             {
-                var result = await InternalExploreAsync(title, dataSource, isMulti: false, options, initialPath, token);
+                var result = await InternalExploreAsync(title, dataSource, isMulti: false, options, initialPath, token, style);
                 return result.FirstOrDefault() ?? string.Empty;
             }
             catch (OperationCanceledException) { return string.Empty; }
@@ -208,13 +213,14 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="options">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="initialPath">Subruta inicial opcional dentro de <paramref name="dataSource"/>.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Array de rutas marcadas o vacío si se cancela.</returns>
-        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default)
+        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default, Styles? style = null)
         {
             Engine.EnterFullScreen();
             try
             {
-                return await InternalExploreAsync(title, dataSource, isMulti: true, options, initialPath, token);
+                return await InternalExploreAsync(title, dataSource, isMulti: true, options, initialPath, token, style);
             }
             catch (OperationCanceledException) { return Array.Empty<string>(); }
             finally { Engine.ExitFullScreen(); }
@@ -259,11 +265,12 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
         /// <param name="initialPath">Subruta inicial opcional.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="styleNull">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Array de rutas seleccionadas (vacío si se cancela).</returns>
-        private static async Task<IReadOnlyList<string>> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerOptions? optionsNull, string initialPath, CancellationToken token)
+        private static async Task<IReadOnlyList<string>> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerOptions? optionsNull, string initialPath, CancellationToken token, Styles? styleNull)
         {
-            optionsNull ??= new();
-            var options = optionsNull.Value;
+            var options = optionsNull ?? new();
+            var style = styleNull ?? new();
             ExplorerFilter filter = options.Filter;
 
             // Si mandas una ruta inicial arranca ahí, si no, usa la raíz del origen de datos
@@ -274,6 +281,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             ScrollState layout = new ScrollState();
             bool shouldRender = true;
             using var canvas = new TermCanvas(true, false, 100, (_, _) => shouldRender = true);
+            var canvas2 = canvas.CreateSubCanvas(0, 0, 0, 0);
 
             HashSet<string> marked = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
             HashSet<string> unmarkedExceptions = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
@@ -377,14 +385,14 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
 
             while (!token.IsCancellationRequested && !exit)
             {
-                if (layout.Update(cursor, entries.Count, ReservedRows))
+                if (layout.Update(cursor, entries.Count, ReservedRows + style.AdditionalRows))
                     shouldRender = true;
 
                 cursor = layout.Cursor;
 
                 if (shouldRender)
                 {
-                    RenderTree(canvas, title, currentNode, entries, layout.Cursor, layout.Scroll, layout.VisibleRows, isMulti, filter, isBlocked, marked, unmarkedExceptions, dataSource, router);
+                    RenderTree(canvas, canvas2, title, currentNode, entries, layout.Cursor, layout.Scroll, layout.VisibleRows, isMulti, filter, isBlocked, marked, unmarkedExceptions, dataSource, router, style);
                     shouldRender = false;
                 }
 
@@ -460,29 +468,43 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="unmarkedExceptions">Conjunto de excepciones de unmark.</param>
         /// <param name="dataSource">Origen de datos para resolver herencia de marcas.</param>
         /// <param name="router">Enrutador que renderiza el footer.</param>
-        private static void RenderTree(TermCanvas canvas, string title, string currentDir, List<ExplorerEntry> entries,
+        private static void RenderTree(TermCanvas canvas, VirtualCanvas canvas2, string title, string currentDir, List<ExplorerEntry> entries,
             int cursor, int scroll, int visibleRows, bool isMulti, ExplorerFilter filter, bool isBlocked,
-            HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource, InputRouter router)
+            HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource, InputRouter router, Styles style)
         {
-            canvas.Resize(Console.WindowWidth, Console.WindowHeight);
+            int W = Console.WindowWidth, H = Console.WindowHeight;
+            canvas.Resize(W, H);
+            canvas.Fill(0, 0, W - 1, H - 1, style.BackgroundChar == '\0' ? ' ' : style.BackgroundChar, style.BackgroundColor);
+
+            var margin = style.Margin?.Invoke(W, H) ?? default;
+            int x1 = margin.Left, y1 = margin.Top, x2 = W - margin.Right - 1, y2 = H - margin.Bottom - 1;
+
+            if (style.DrawBorder)
+            {
+                canvas.DrawBorder(x1, y1, x2, y2, style.BorderColor);
+                x1++; y1++; x2--; y2--;
+            }
+
+            canvas2.Resize(x1, y1, x2, y2);
+            canvas2.Clear();
 
             // 1. Cabecera estática (Coordenadas fijas)
-            canvas.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
-            canvas.WriteAtAndClear(2, 3, $"Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}");
+            canvas2.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
+            canvas2.WriteAtAndClear(2, 3, $"Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}");
 
-            if (scroll > 0) canvas.WriteAtAndClear(2, 4, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
-            else canvas.ClearLine(4);
+            if (scroll > 0) canvas2.WriteAtAndClear(2, 4, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
+            else canvas2.ClearLine(4);
 
             int end = Math.Min(entries.Count, scroll + visibleRows);
 
             if (entries.Count == 0)
             {
-                canvas.WriteAtAndClear(2, 5, $"  {(isBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}", ThemeColors.Dim);
-                for (int i = 1; i < visibleRows; i++) canvas.ClearLine(5 + i);
+                canvas2.WriteAtAndClear(2, 5, $"  {(isBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}", ThemeColors.Dim);
+                for (int i = 1; i < visibleRows; i++) canvas2.ClearLine(5 + i);
             }
             else
             {
-                canvas.DrawList(entries, 2, 5, visibleRows, scroll, false, (entry, i) =>
+                canvas2.DrawList(entries, 2, 5, visibleRows, scroll, false, (entry, i) =>
                 {
                     string displayName = entry.IsDirectory ? $"{entry.Name}/" : entry.Name;
 
@@ -514,10 +536,10 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             }
 
             int remaining = entries.Count - end;
-            if (remaining > 0) canvas.WriteAtAndClear(2, canvas.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
-            else canvas.ClearLine(canvas.Height - 3);
+            if (remaining > 0) canvas2.WriteAtAndClear(2, canvas2.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
+            else canvas2.ClearLine(canvas2.Height - 3);
 
-            canvas.WriteAt(2, canvas.Height - 2, router.RenderFooter());
+            canvas2.WriteAt(2, canvas2.Height - 2, router.RenderFooter());
 
             canvas.Flush();
         }

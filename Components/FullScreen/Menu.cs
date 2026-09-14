@@ -33,6 +33,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="title">Título a mostrar en la cabecera.</param>
         /// <param name="items">Lista de opciones a elegir.</param>
         /// <param name="token">Token para cancelar la selección.</param>
+        /// <param name="style">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Índice del item elegido, o -1 si el usuario cancela (Esc/q).</returns>
         public static async Task<int> SelectOneAsync(string title, IReadOnlyList<string> items, int startIndex = 0, CancellationToken token = default, Styles? style = null)
         {
@@ -64,6 +65,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="items">Lista de opciones a elegir.</param>
         /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
         /// <param name="token">Token para cancelar la selección.</param>
+        /// <param name="style">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Arreglo con los índices marcados al confirmar (ordenado), o vacío si el usuario cancela.</returns>
         public static async Task<IReadOnlyList<int>> SelectMultiAsync(string title, IReadOnlyList<string> items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default, Styles? style = null)
         {
@@ -112,9 +114,10 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
         /// <param name="router">Enrutador de input configurado.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="styleNull">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
         private static async Task RunMenuEngine(string title, IReadOnlyList<string> items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, Styles? styleNull, int startIndex)
         {
-            var style = styleNull ?? new Styles();
+            var style = styleNull ?? new();
             ScrollState layout = new ScrollState();
             bool shouldRender = true;
             using var canvas = new TermCanvas(true, false, 100, onResize: (_, _) => { shouldRender = true; });
@@ -166,6 +169,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox y marca los ítems incluidos.</param>
         /// <param name="router">Enrutador de input encargado de renderizar el footer contextual.</param>
+        /// <param name="style">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
         private static void RenderMenu(TermCanvas canvas, VirtualCanvas canvas2, string title, IReadOnlyList<string> items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router, Styles style)
         {
             int W = Console.WindowWidth, H = Console.WindowHeight;

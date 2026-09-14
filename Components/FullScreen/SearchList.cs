@@ -30,8 +30,9 @@ namespace TermFlow.Components.FullScreen
         /// <param name="items">Lista de ítems sobre los que filtrar.</param>
         /// <param name="startIndex">Índice inicial donde empezará el cursor antes de filtrar.</param>
         /// <param name="token">Token para cancelar la operación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Índice original del ítem elegido, o -1 si el usuario cancela.</returns>
-        public static async Task<int> FilterOneAsync(string title, IReadOnlyList<string> items, int startIndex = 0, CancellationToken token = default)
+        public static async Task<int> FilterOneAsync(string title, IReadOnlyList<string> items, int startIndex = 0, CancellationToken token = default, Styles? style = null)
         {
             if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
             else isSearchListRunning = true;
@@ -47,7 +48,7 @@ namespace TermFlow.Components.FullScreen
                 var router = new InputRouter(false)
                     .BindCancel(() => { result = -1; _exit = true; });
 
-                await RunSearchEngine(title, items, filtered, null, router, token, startIndex, () =>
+                await RunSearchEngine(title, items, filtered, null, router, token, style, startIndex, () =>
                 {
                     if (filtered.Count > 0)
                         result = filtered[_cursor].OriginalIndex; _exit = true;
@@ -66,8 +67,9 @@ namespace TermFlow.Components.FullScreen
         /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
         /// <param name="startIndex">Índice inicial donde empezará el cursor antes de filtrar.</param>
         /// <param name="token">Token para cancelar la operación.</param>
+        /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Arreglo con los índices originales marcados al confirmar, o vacío si el usuario cancela.</returns>
-        public static async Task<int[]> FilterMultiAsync(string title, IReadOnlyList<string> items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default)
+        public static async Task<int[]> FilterMultiAsync(string title, IReadOnlyList<string> items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default, Styles? style = null)
         {
             if (isSearchListRunning) throw new InvalidOperationException("Ya hay un SearchList activo");
             else isSearchListRunning = true;
@@ -97,7 +99,7 @@ namespace TermFlow.Components.FullScreen
                         }
                     });
 
-                await RunSearchEngine(title, items, filtered, selectedMap, router, token, startIndex, () =>
+                await RunSearchEngine(title, items, filtered, selectedMap, router, token, style, startIndex, () =>
                     {
                         result = new int[selectedMap.Count];
                         selectedMap.CopyTo(result); Array.Sort(result); _exit = true;
@@ -117,20 +119,23 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
         /// <param name="router">Enrutador de input configurado.</param>
         /// <param name="token">Token de cancelación.</param>
+        /// <param name="styleNull">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <param name="startIndex">Índice inicial del cursor.</param>
-        private static async Task RunSearchEngine(string title, IReadOnlyList<string> items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, int startIndex, Action OnConfirm)
+        private static async Task RunSearchEngine(string title, IReadOnlyList<string> items, List<(string Text, int OriginalIndex)> filtered, HashSet<int> selectedMap, InputRouter router, CancellationToken token, Styles? styleNull, int startIndex, Action OnConfirm)
         {
+            var style = styleNull ?? new();
             ScrollState layout = new ScrollState();
             bool shouldRender = true;
             using var canvas = new TermCanvas(true, false, 100, onResize: (_, _) => shouldRender = true);
+            var canvas2 = canvas.CreateSubCanvas(0, 0, 0, 0);
             canvas.CursorVisible = true;
             var searchEdit = new LineEdit("  Buscar: » ", router);
-            router.BindConfirm(OnConfirm);
 
             _cursor = startIndex;
             _exit = false;
 
-            router.BindNavigate(
+            router.BindConfirm(OnConfirm)
+                .BindNavigate(
                         () => { if (filtered.Count > 0) _cursor = (_cursor - 1 + filtered.Count) % filtered.Count; },
                         () => { if (filtered.Count > 0) _cursor = (_cursor + 1) % filtered.Count; }
                     )
@@ -158,14 +163,14 @@ namespace TermFlow.Components.FullScreen
                     if (string.IsNullOrEmpty(currentQuery) || items[i].Contains(currentQuery, StringComparison.OrdinalIgnoreCase))
                         filtered.Add((items[i], i));
 
-                if (layout.Update(_cursor, filtered.Count, ReservedRows))
+                if (layout.Update(_cursor, filtered.Count, ReservedRows + style.AdditionalRows))
                     shouldRender = true;
 
                 _cursor = layout.Cursor;
 
                 if (shouldRender)
                 {
-                    RenderSearch(canvas, title, currentQuery, searchCursorPos, filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router, searchEdit);
+                    RenderSearch(canvas, canvas2, title, currentQuery, searchCursorPos, filtered, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router, searchEdit, style);
                     shouldRender = false;
                 }
 
@@ -194,29 +199,43 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox marcando estos índices originales.</param>
         /// <param name="router">Enrutador que renderiza el footer contextual.</param>
         /// <param name="searchEdit">Instancia de <see cref="LineEdit"/> para acceder al largo visual del prompt.</param>
-        private static void RenderSearch(TermCanvas canvas, string title, string queryString, int searchCursorPos, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router, LineEdit searchEdit)
+        private static void RenderSearch(TermCanvas canvas, VirtualCanvas canvas2, string title, string queryString, int searchCursorPos, List<(string Text, int OriginalIndex)> filtered, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router, LineEdit searchEdit, Styles style)
         {
-            canvas.Resize(Console.WindowWidth, Console.WindowHeight);
+            int W = Console.WindowWidth, H = Console.WindowHeight;
+            canvas.Resize(W, H);
+            canvas.Fill(0, 0, W - 1, H - 1, style.BackgroundChar == '\0' ? ' ' : style.BackgroundChar, style.BackgroundColor);
+
+            var margin = style.Margin?.Invoke(W, H) ?? default;
+            int x1 = margin.Left, y1 = margin.Top, x2 = W - margin.Right - 1, y2 = H - margin.Bottom - 1;
+
+            if (style.DrawBorder)
+            {
+                canvas.DrawBorder(x1, y1, x2, y2, style.BorderColor);
+                x1++; y1++; x2--; y2--;
+            }
+
+            canvas2.Resize(x1, y1, x2, y2);
+            canvas2.Clear();
 
             // Cabecera
-            canvas.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
-            canvas.WriteAtAndClear(2, 3, $"Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}");
+            canvas2.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
+            canvas2.WriteAtAndClear(2, 3, $"Buscar: {ThemeColors.Selector}»{ThemeColors.Reset} {AnsiColor.Bold}{queryString}{ThemeColors.Reset}");
 
             int end = Math.Min(filtered.Count, scroll + visibleRows);
 
             // Indicador de scroll superior
-            if (scroll > 0) canvas.WriteAtAndClear(2, 4, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
-            else canvas.ClearLine(4);
+            if (scroll > 0) canvas2.WriteAtAndClear(2, 4, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
+            else canvas2.ClearLine(4);
 
             // Renderizado de ítems filtrados
             if (filtered.Count == 0)
             {
-                canvas.WriteAtAndClear(2, 5, $"  (No se encontraron resultados)", ThemeColors.Dim);
-                for (int i = 1; i < visibleRows; i++) canvas.ClearLine(5 + i);
+                canvas2.WriteAtAndClear(2, 5, $"  (No se encontraron resultados)", ThemeColors.Dim);
+                for (int i = 1; i < visibleRows; i++) canvas2.ClearLine(5 + i);
             }
             else
             {
-                canvas.DrawList(filtered, 2, 5, visibleRows, scroll, false, (item, i) =>
+                canvas2.DrawList(filtered, 2, 5, visibleRows, scroll, false, (item, i) =>
                 {
                     string checkPrefix = "";
                     if (selectedMap != null)
@@ -235,19 +254,19 @@ namespace TermFlow.Components.FullScreen
 
             // Indicador de scroll inferior
             int remaining = filtered.Count - end;
-            if (remaining > 0) canvas.WriteAtAndClear(2, canvas.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
-            else canvas.ClearLine(canvas.Height - 3);
+            if (remaining > 0) canvas2.WriteAtAndClear(2, canvas2.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
+            else canvas2.ClearLine(canvas2.Height - 3);
 
             // Footer
-            canvas.WriteAt(2, canvas.Height - 2, router.RenderFooter());
+            canvas2.WriteAt(2, canvas2.Height - 2, router.RenderFooter());
 
             // --- POSICIONAMIENTO DEL CURSOR REAL ---
-            int width = canvas.Width;
+            int width = canvas2.Width;
             var wrappedQueryLines = (searchEdit.LastPromptLine + queryString).WrapText(width);
             var (targetLine, targetCol) = LineEdit.MapPositionTo2D(wrappedQueryLines, searchEdit.PromptLength + searchCursorPos, width);
 
             int cursorRow = 4 + targetLine; // La fila 4 es donde empieza el input de búsqueda
-            canvas.CursorPos = (X: targetCol - 1, Y: cursorRow - 1);
+            canvas.CursorPos = (X: targetCol - 1 + x1, Y: cursorRow - 1 + y1);
 
             canvas.Flush();
         }
