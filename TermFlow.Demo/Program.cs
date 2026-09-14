@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using TermFlow.Base;
 using TermFlow.Components.FullScreen;
 using TermFlow.Components.FullScreen.TreeExplorer;
 using TermFlow.Components.InLine;
@@ -27,22 +28,33 @@ internal class Program
         "TreeExplorer.ExploreMultiAsync — virtual",
         "LivePanel — panel de logs dinámico",
         "LiveConsole — Consola en estilo chat",
-        "Canvas - WIP",
+        "TermCanvas — Canvas con Dirty Tracking",
         "Salir"
     ];
 
     private static async Task Main()
     {
         Engine.Setup();
-        ThemeColors.Primary = AnsiColor.Green + AnsiColor.Bold;
-        ThemeColors.Selector = ThemeColors.Bright;
 
         int lastChoice = 0;
         while (true)
         {
+            ThemeColors.Primary = AnsiColor.Green + AnsiColor.Bold;
+            ThemeColors.Selector = ThemeColors.Bright;
             int choice;
 
-            try { choice = await SearchList.FilterOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems, lastChoice); }
+            try
+            {
+                choice = await SearchList.FilterOneAsync($"{ThemeColors.Primary}TermFlow.Net{ThemeColors.Reset} — {AnsiColor.Cyan}{AnsiColor.Bold}Interactive Demo{ThemeColors.Reset} — {AnsiColor.Magenta}{AnsiColor.Bold}¿Qué querés testear?{ThemeColors.Reset}", MainMenuItems, lastChoice,
+                    style: new Styles
+                    {
+                        DrawBorder = true,
+                        BackgroundChar = '#',
+                        BackgroundColor = AnsiColor.Black + AnsiColor.BgWhite,
+                        BorderColor = AnsiColor.White + AnsiColor.BgBlack,
+                        Margin = (W, H) => (W / 10, 2, W / 10, 2)
+                    });
+            }
             catch (Exception ex)
             {
                 Engine.ExitFullScreen(true);
@@ -150,16 +162,36 @@ internal class Program
 
     private static async Task TestMenuOne()
     {
+        ThemeColors.Primary = AnsiColor.Blue + AnsiColor.Bold;
+        ThemeColors.Selector = ThemeColors.Primary;
         string[] items = ["Opción Alpha", "Opción Beta", "Opción Gamma", "Opción Delta"];
-        int idx = await Menu.SelectOneAsync($"{ThemeColors.Primary}Selección única{ThemeColors.Reset}", items);
+        int idx = await Menu.SelectOneAsync($"{ThemeColors.Primary}Selección única{ThemeColors.Reset}", items,
+            style: new Styles
+            {
+                DrawBorder = true,
+                BackgroundChar = '+',
+                BackgroundColor = AnsiColor.Black + AnsiColor.BgBlue,
+                BorderColor = AnsiColor.BgBlack + AnsiColor.Blue,
+                Margin = (W, H) => (W / 10, 2, W / 10, 2)
+            });
         if (idx == -1) TextViewer.Warn("Cancelaste la selección");
         else TextViewer.Success($"Elegiste el índice {idx}: {items[idx]}");
     }
 
     private static async Task TestMenuMulti()
     {
+        ThemeColors.Primary = AnsiColor.Blue + AnsiColor.Bold;
+        ThemeColors.Selector = ThemeColors.Primary;
         string[] items = ["Lectura", "Escritura", "Ejecución", "Acceso de red", "Acceso admin"];
-        IReadOnlyList<int> sel = await Menu.SelectMultiAsync($"{ThemeColors.Primary}Selección múltiple (permisos){ThemeColors.Reset}", items);
+        IReadOnlyList<int> sel = await Menu.SelectMultiAsync($"{ThemeColors.Primary}Selección múltiple (permisos){ThemeColors.Reset}", items,
+            style: new Styles
+            {
+                DrawBorder = true,
+                BackgroundChar = '+',
+                BackgroundColor = AnsiColor.Black + AnsiColor.BgBlue,
+                BorderColor = AnsiColor.BgBlack + AnsiColor.Blue,
+                Margin = (W, H) => (W / 10, 2, W / 10, 2)
+            });
         if (sel.Count == 0) TextViewer.Warn("No marcaste nada");
         else
         {
@@ -171,16 +203,36 @@ internal class Program
 
     private static async Task TestSearchOne()
     {
+        ThemeColors.Primary = AnsiColor.Yellow + AnsiColor.Bold;
+        ThemeColors.Selector = ThemeColors.Primary;
         string[] items = ["Ana Pérez", "Bruno Díaz", "Carla Soto", "Diego Luna", "Eva Marín", "Franco Ríos"];
-        int idx = await SearchList.FilterOneAsync($"{ThemeColors.Primary}Buscar cliente{ThemeColors.Reset}", items);
+        int idx = await SearchList.FilterOneAsync($"{ThemeColors.Primary}Buscar cliente{ThemeColors.Reset}", items,
+            style: new Styles
+            {
+                DrawBorder = true,
+                BackgroundChar = '·',
+                BackgroundColor = AnsiColor.Black + AnsiColor.BgYellow,
+                BorderColor = AnsiColor.BgBlack + AnsiColor.Yellow,
+                Margin = (W, H) => (W / 10, 2, W / 10, 2)
+            });
         if (idx == -1) TextViewer.Warn("Búsqueda cancelada");
         else TextViewer.Success($"Elegiste: {items[idx]}");
     }
 
     private static async Task TestSearchMulti()
     {
+        ThemeColors.Primary = AnsiColor.Yellow + AnsiColor.Bold;
+        ThemeColors.Selector = ThemeColors.Primary;
         string[] items = ["bug", "documentation", "enhancement", "duplicate", "wontfix", "help wanted", "good first issue"];
-        int[] sel = await SearchList.FilterMultiAsync($"{ThemeColors.Primary}Etiquetas (buscá y marcá){ThemeColors.Reset}", items);
+        int[] sel = await SearchList.FilterMultiAsync($"{ThemeColors.Primary}Etiquetas (buscá y marcá){ThemeColors.Reset}", items,
+            style: new Styles
+            {
+                DrawBorder = true,
+                BackgroundChar = '·',
+                BackgroundColor = AnsiColor.Black + AnsiColor.BgYellow,
+                BorderColor = AnsiColor.BgBlack + AnsiColor.Yellow,
+                Margin = (W, H) => (W / 10, 2, W / 10, 2)
+            });
         if (sel.Length == 0) TextViewer.Warn("Sin selección");
         else
         {
@@ -209,8 +261,15 @@ internal class Program
     {
         string inicio = Directory.GetCurrentDirectory();
         ThemeColors.Selector = ThemeColors.Primary;
-        string elegido = await TreeExplorer.ExploreOneAsync($"{ThemeColors.Primary}Abrir archivo (físico){ThemeColors.Reset}", inicio);
-        ThemeColors.Selector = ThemeColors.Bright;
+        string elegido = await TreeExplorer.ExploreOneAsync($"{ThemeColors.Primary}Abrir archivo (físico){ThemeColors.Reset}", inicio,
+            style: new Styles
+            {
+                DrawBorder = true,
+                BackgroundChar = '*',
+                BackgroundColor = AnsiColor.Black + AnsiColor.BgGreen,
+                BorderColor = AnsiColor.BgBlack + AnsiColor.Green,
+                Margin = (W, H) => (W / 10, 2, W / 10, 2)
+            });
         if (string.IsNullOrEmpty(elegido)) TextViewer.Warn("Cancelaste");
         else TextViewer.Success($"Ruta elegida: {elegido}");
     }
@@ -219,8 +278,15 @@ internal class Program
     {
         string inicio = Directory.GetCurrentDirectory();
         ThemeColors.Selector = ThemeColors.Primary;
-        IReadOnlyList<string> rutas = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Seleccionar múltiples (físico){ThemeColors.Reset}", inicio);
-        ThemeColors.Selector = ThemeColors.Bright;
+        IReadOnlyList<string> rutas = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Seleccionar múltiples (físico){ThemeColors.Reset}", inicio,
+            style: new Styles
+            {
+                DrawBorder = true,
+                BackgroundChar = '*',
+                BackgroundColor = AnsiColor.Black + AnsiColor.BgGreen,
+                BorderColor = AnsiColor.BgBlack + AnsiColor.Green,
+                Margin = (W, H) => (W / 10, 2, W / 10, 2)
+            });
         if (rutas.Count == 0) TextViewer.Warn("Sin selección");
         else
         {
@@ -242,8 +308,15 @@ internal class Program
             "rds/staging-db"
         };
         ThemeColors.Selector = ThemeColors.Primary;
-        IReadOnlyList<string> sel = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Recursos virtuales{ThemeColors.Reset}", rutas, virtualRoot: "aws");
-        ThemeColors.Selector = ThemeColors.Bright;
+        IReadOnlyList<string> sel = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Recursos virtuales{ThemeColors.Reset}", rutas, virtualRoot: "aws",
+            style: new Styles
+            {
+                DrawBorder = true,
+                BackgroundChar = '*',
+                BackgroundColor = AnsiColor.Black + AnsiColor.BgGreen,
+                BorderColor = AnsiColor.BgBlack + AnsiColor.Green,
+                Margin = (W, H) => (W / 10, 2, W / 10, 2)
+            });
         if (sel.Count == 0) TextViewer.Warn("Sin selección");
         else
         {
