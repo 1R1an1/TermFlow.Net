@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Core;
 
-namespace TermFlow.Base;
+namespace TermFlow.Dev;
 
 /// <summary>
 /// Motor de renderizado intermedio (Canvas Virtual) para consola.
@@ -17,7 +17,7 @@ namespace TermFlow.Base;
 /// Implementa renderizado diferencial (Dirty Tracking), actualizando únicamente 
 /// las celdas que cambiaron desde el último frame para maximizar el rendimiento.
 /// </summary>
-public class TermCanvas : IDisposable, ICanvas
+public class TermCanvas : ICanvas, IDisposable
 {
     /// <summary>
     /// Representa una celda individual del canvas virtual en memoria.

@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
-namespace TermFlow.Base;
+namespace TermFlow.Dev;
 
 /// <summary>
 /// Puente de salida unificado que decide automáticamente entre <see cref="LivePanel"/> y la consola común,

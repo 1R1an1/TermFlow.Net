@@ -5,13 +5,13 @@ using System.Collections.Generic;
 using System.Text;
 using TermFlow.Core;
 
-namespace TermFlow.Base
+namespace TermFlow.Dev
 {
     /// <summary>
     /// Motor de enrutamiento y unificación de entrada para TermFlow.
     /// Registra acciones físicas, agrupa semánticamente el Footer mediante "/" y procesa eventos sin allocs.
     /// </summary>
-    internal sealed class InputRouter
+    public sealed class InputRouter
     {
         private readonly Dictionary<ConsoleKey, Action> _keyHandlers = new();
         private readonly Dictionary<char, Action> _charHandlers = new();

@@ -9,7 +9,7 @@ namespace TermFlow.Core;
 /// <summary>
 /// Clasifica el tipo de evento de entrada capturado por <see cref="InputReader"/>.
 /// </summary>
-internal enum InputEventType
+public enum InputEventType
 {
     /// <summary>No hay evento disponible.</summary>
     None,
@@ -24,7 +24,7 @@ internal enum InputEventType
 /// <summary>
 /// Estructura inmutable que representa un evento de entrada individual de la consola.
 /// </summary>
-internal struct ConsoleInputEvent
+public struct ConsoleInputEvent
 {
     /// <summary>Tipo de evento detectado.</summary>
     public InputEventType Type { get; set; }
@@ -36,7 +36,7 @@ internal struct ConsoleInputEvent
 /// Lector de bajo nivel para la consola. Detecta teclas comunes y decodifica
 /// las secuencias ANSI SGR del mouse (scroll up/down) descartando clicks.
 /// </summary>
-internal static class InputReader
+public static class InputReader
 {
     /// <summary>
     /// Lee un evento de entrada sin bloquear. Si no hay teclas disponibles devuelve un evento

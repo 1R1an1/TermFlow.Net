@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MPL-2.0
  * Copyright (c) 2026 1R1an1 */
-using TermFlow.Base;
+using TermFlow.Dev;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 

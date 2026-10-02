@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using TermFlow.Core;
 
-namespace TermFlow.Base.CanvasExt;
+namespace TermFlow.Dev.CanvasExt;
 
 /// <summary>
 /// Extensiones para <see cref="TermCanvas"/>.

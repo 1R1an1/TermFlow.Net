@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace TermFlow.Core
+namespace TermFlow.Dev
 {
     /// <summary>
     /// Utilidades de extensión para manipular strings que contienen secuencias ANSI,
@@ -40,7 +40,7 @@ namespace TermFlow.Core
         /// <param name="text">Texto con posibles códigos ANSI</param>
         /// <param name="width">Ancho máximo en caracteres visuales</param>
         /// <returns>Lista de líneas envueltas con sus códigos ANSI conservados</returns>
-        internal static List<string> WrapText(this string text, int width)
+        public static List<string> WrapText(this string text, int width)
         {
             var result = new List<string>();
             if (width <= 0) { result.Add(text ?? ""); return result; }
@@ -108,7 +108,7 @@ namespace TermFlow.Core
         /// <param name="text">Texto a evaluar.</param>
         /// <param name="width">Ancho máximo en caracteres visuales.</param>
         /// <returns>Cantidad de líneas físicas resultantes.</returns>
-        internal static int CountPhysicalLines(this string text, int width)
+        public static int CountPhysicalLines(this string text, int width)
              => WrapText(text, width).Count;
 
         /// <summary>
@@ -117,7 +117,7 @@ namespace TermFlow.Core
         /// <param name="text">Texto original con posibles ANSI.</param>
         /// <param name="maxLength">Cantidad máxima de caracteres visibles a conservar.</param>
         /// <returns>Texto truncado manteniendo los códigos ANSI intactos.</returns>
-        internal static string Truncate(this string text, int maxLength)
+        public static string Truncate(this string text, int maxLength)
         {
             if (string.IsNullOrEmpty(text) || maxLength <= 0) return "";
 
@@ -152,7 +152,7 @@ namespace TermFlow.Core
         /// Parsea un string separando el texto visible de las secuencias ANSI.
         /// </summary>
         /// <returns>Una colección de tuplas (Texto, EsAnsi).</returns>
-        internal static IEnumerable<(string Segment, bool IsAnsi)> ParseAnsi(this string text)
+        public static IEnumerable<(string Segment, bool IsAnsi)> ParseAnsi(this string text)
         {
             if (string.IsNullOrEmpty(text)) yield break;
 

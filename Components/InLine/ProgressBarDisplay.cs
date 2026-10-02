@@ -4,7 +4,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using TermFlow.Base;
+using TermFlow.Dev;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 

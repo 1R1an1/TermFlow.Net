@@ -8,13 +8,13 @@ using System.Threading.Tasks;
 using TermFlow.Components.FullScreen;
 using TermFlow.Core;
 
-namespace TermFlow.Base
+namespace TermFlow.Dev
 {
     /// <summary>
     /// Editor de línea interactivo para entrada de texto en consola.
     /// Administra el buffer, la posición del cursor y los eventos de teclado.
     /// </summary>
-    internal sealed class LineEdit
+    public sealed class LineEdit
     {
         private readonly string _lastPromptLine;
         private readonly int _promptLength;

@@ -1,7 +1,6 @@
 using System;
-using TermFlow.Core;
 
-namespace TermFlow.Base;
+namespace TermFlow.Core;
 
 public delegate (int Left, int Top, int Right, int Bottom) MarginCalc(int Width, int Height);
 

@@ -3,7 +3,7 @@
 using System;
 using TermFlow.Core;
 
-namespace TermFlow.Base;
+namespace TermFlow.Dev;
 
 /// <summary>
 /// Canvas virtual dentro de un <see cref="TermCanvas"/>: un rectángulo con coordenadas propias

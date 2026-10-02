@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
-using TermFlow.Base;
-using TermFlow.Base.CanvasExt;
+using TermFlow.Dev;
+using TermFlow.Dev.CanvasExt;
 using TermFlow.Core;
 
 namespace TermFlow.Demo;

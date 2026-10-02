@@ -1,6 +1,4 @@
-using TermFlow.Core;
-
-namespace TermFlow.Base;
+namespace TermFlow.Core;
 
 /// <summary>
 /// Contrato común para superficies de dibujo de caracteres en 2D con coordenadas propias base 0.
