@@ -50,6 +50,22 @@ public class TermCanvas : ICanvas, IDisposable
     private readonly Dictionary<int, int> _pendingClearLineX = new(); // Y -> X para el \x1b[K
     private string _cursorColor = ThemeColors.Reset;
     private bool? _lastCursorVisible = null;
+    private (int X, int Y)? _lastCursorPos;
+
+    /// <summary>
+    /// Indica si el canvas opera en modo inline.
+    /// </summary>
+    private bool _isInline = false;
+
+    /// <summary>
+    /// Cantidad de filas del canvas que ya fueron emitidas al flujo de la consola en modo inline.
+    /// </summary>
+    private int _inlineHeight = 0;
+
+    /// <summary>
+    /// Última fila donde quedó el cursor de la terminal al final del Flush inline anterior.
+    /// </summary>
+    private int _lastInlineCursorY = 0;
 
     /// <summary>
     /// Obtiene o establece donde se posicionará el cursor real (base 0) de la consola en el próximo <see cref="Flush"/>.
@@ -148,6 +164,56 @@ public class TermCanvas : ICanvas, IDisposable
         : this(automaticResize, resizeCanvas, resizeIntervalms, (tc, lc) => { onResize?.Invoke(tc, lc); return Task.CompletedTask; }) { }
 
     /// <summary>
+    /// Inicializa una nueva instancia de <see cref="TermCanvas"/> en modo inline.
+    /// El canvas convive con el flujo normal de la consola, respeta el historial anterior.
+    /// </summary>
+    /// <param name="initialHeight">Alto inicial del canvas, en celdas.</param>
+    /// <param name="automaticResize">Si es <c>true</c>, el canvas detecta automáticamente cambios en el tamaño de la consola.</param>
+    /// <param name="resizeCanvas">Si es <c>true</c>, el canvas de va a redimencionar si <paramref name="automaticResize"/> este activo, en caso contrario no se redimenciona.</param>
+    /// <param name="resizeIntervalms">Intervalo en milisegundos para detectar cambios en el ancho de la consola.</param>
+    /// <param name="onResize">Callback opcional que se invoca cuando el ancho de la consola cambia, recibiendo la instancia del canvas y el lock de sincronización interno.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="initialHeight"/> o <paramref name="resizeIntervalms"/> son menores o iguales a 0.</exception>
+    public TermCanvas(int initialHeight, bool automaticResize = false, bool resizeCanvas = true, int resizeIntervalms = 250, Action<TermCanvas, Lock, int> onResize = null)
+    {
+        if (initialHeight <= 0) throw new ArgumentOutOfRangeException(nameof(initialHeight), "El alto inicial debe ser mayor a 0.");
+        if (resizeIntervalms <= 0) throw new ArgumentOutOfRangeException(nameof(resizeIntervalms), "El intervalo debe ser mayor a 0.");
+        _isInline = true;
+        _inlineHeight = 0;
+
+        _automaticResize = automaticResize;
+        if (automaticResize)
+        {
+            _resizeCts = new CancellationTokenSource();
+            int _lastWidth = Console.WindowWidth;
+            Init(Console.WindowWidth, initialHeight);
+            ThreadPool.QueueUserWorkItem(async _ =>
+            {
+                try
+                {
+                    while (!_resizeCts.Token.IsCancellationRequested)
+                    {
+                        int width = Console.WindowWidth;
+                        if (width != _lastWidth)
+                        {
+                            lock (_syncLock)
+                            {
+                                _lastWidth = width;
+                                if (resizeCanvas)
+                                    Resize(width, _height);
+                            }
+                            onResize?.Invoke(this, _syncLock, _lastWidth);
+                        }
+                        await Task.Delay(resizeIntervalms, _resizeCts.Token);
+                    }
+                }
+                catch (TaskCanceledException) when (_resizeCts.IsCancellationRequested) { }
+            });
+        }
+        else
+            Init(Console.WindowWidth, initialHeight);
+    }
+
+    /// <summary>
     /// Redimensiona el canvas interno borrando todo el contenido anterior.
     /// Marca el flag <see cref="_forceClearScreen"/> para que el próximo <see cref="Flush"/> limpie la terminal.
     /// </summary>
@@ -194,7 +260,8 @@ public class TermCanvas : ICanvas, IDisposable
             _frontBuffer = new Cell[inicialWidth, inicialHeight];
             _buffer = new Cell[inicialWidth, inicialHeight];
             _dirty = new bool[inicialWidth, inicialHeight];
-            _forceClearScreen = true;
+            if (!_isInline)
+                _forceClearScreen = true;
         }
     }
 
@@ -412,38 +479,125 @@ public class TermCanvas : ICanvas, IDisposable
 
         lock (_syncLock)
         {
-            if (!_anyDirty && !_forceClearScreen && (_lastCursorVisible == CursorVisible)) return;
+            if (!_anyDirty && !_forceClearScreen && _lastCursorVisible == CursorVisible && CursorPos == _lastCursorPos) return;
 
             var sb = new StringBuilder(4096);
 
-            // Si se pidió un Clear o Resize, mandamos el comando ANSI de borrar todo.
             if (_forceClearScreen)
             {
                 sb.Append(ThemeColors.Reset);
                 _cursorColor = ThemeColors.Reset;
-                sb.Append("\x1b[2J"); // Borrar pantalla
+                if (_isInline)
+                {
+                    // Subir al inicio del canvas y limpiar desde ahí hacia abajo.
+                    if (_lastInlineCursorY > 0)
+                        sb.Append($"\x1b[{_lastInlineCursorY}A");
+                    sb.Append('\r');
+                    sb.Append("\x1b[J");
+                    _inlineHeight = 0;
+                    _lastInlineCursorY = 0;
+                }
+                else
+                    sb.Append("\x1b[2J");
                 _forceClearScreen = false;
             }
 
             int? cursorX = null;
             int? cursorY = null;
+            int inlineCursorX = 0;
+
             if (_anyDirty)
             {
+                int startY, endY;
 
-                int startY = Math.Max(0, _minDirtyY);
-                if (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y < startY)
-                    startY = _pendingClearScreen.Value.Y;
-                int endY = Math.Min(_height - 1, _maxDirtyY);
+                if (_isInline)
+                {
+                    int firstDirty = _minDirtyY;
+                    int lastDirty = _maxDirtyY;
+                    int firstNew = _inlineHeight;
+                    int lastNew = _height - 1;
+
+                    int candidateStart = (firstDirty != int.MaxValue) ? Math.Min(firstDirty, firstNew) : firstNew;
+                    int candidateEnd = (lastDirty != int.MinValue) ? Math.Max(lastDirty, lastNew) : lastNew;
+                    if (candidateStart == int.MaxValue) candidateStart = 0;
+                    if (candidateEnd < 0) candidateEnd = 0;
+                    startY = candidateStart;
+                    endY = candidateEnd;
+                }
+                else
+                {
+                    startY = Math.Max(0, _minDirtyY);
+                    if (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y < startY)
+                        startY = _pendingClearScreen.Value.Y;
+                    endY = Math.Min(_height - 1, _maxDirtyY);
+                }
+
+                int inlineCurrentY = _lastInlineCursorY;
 
                 for (int y = startY; y <= endY; y++)
                 {
+                    if (_isInline)
+                    {
+                        // Saltear filas sin cambios.
+                        bool rowDirty = false;
+                        if (y >= _minDirtyY && y <= _maxDirtyY)
+                        {
+                            for (int x = 0; x < _width; x++)
+                                if (_dirty[x, y]) { rowDirty = true; break; }
+                        }
+                        bool rowNew = y >= _inlineHeight;
+                        bool rowHasClear = _pendingClearLineX.ContainsKey(y) ||
+                            (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y == y);
+
+                        if (!rowDirty && !rowNew && !rowHasClear)
+                            continue;
+
+                        // Posicionarse en la fila y relativamente desde inlineCurrentY.
+                        if (y != inlineCurrentY)
+                        {
+                            if (rowNew)
+                            {
+                                if (inlineCurrentY < _inlineHeight - 1)
+                                {
+                                    int deltaToLastEmitted = _inlineHeight - 1 - inlineCurrentY;
+                                    if (deltaToLastEmitted > 0)
+                                        sb.Append($"\x1b[{deltaToLastEmitted}B");
+                                    inlineCurrentY = _inlineHeight - 1;
+                                }
+                                for (int i = inlineCurrentY + 1; i <= y; i++)
+                                    sb.Append("\r\n");
+                            }
+                            else
+                            {
+                                int deltaY = y - inlineCurrentY;
+                                if (deltaY > 0)
+                                    sb.Append($"\x1b[{deltaY}B");
+                                else if (deltaY < 0)
+                                    sb.Append($"\x1b[{-deltaY}A");
+                            }
+                        }
+                        sb.Append('\r');
+                        inlineCursorX = 0;
+                        inlineCurrentY = y;
+                    }
+
                     // --- INYECCIÓN DEL COMANDO \x1b[J ---
                     if (_pendingClearScreen.HasValue && _pendingClearScreen.Value.Y == y)
                     {
                         sb.Append(ThemeColors.Reset);
                         _cursorColor = ThemeColors.Reset;
-                        // Posicionamos el cursor en (X, Y) y mandamos el ANSI J
-                        sb.Append($"\x1b[{y + 1};{_pendingClearScreen.Value.X + 1}H\x1b[J");
+                        if (_isInline)
+                        {
+                            int targetX = _pendingClearScreen.Value.X;
+                            if (targetX > inlineCursorX)
+                                sb.Append($"\x1b[{targetX - inlineCursorX}C");
+                            else if (targetX < inlineCursorX)
+                                sb.Append($"\x1b[{inlineCursorX - targetX}D");
+                            sb.Append("\x1b[J");
+                            inlineCursorX = targetX;
+                        }
+                        else
+                            sb.Append($"\x1b[{y + 1};{_pendingClearScreen.Value.X + 1}H\x1b[J");
                         _pendingClearScreen = null;
                     }
                     // --- INYECCIÓN DEL COMANDO \x1b[K (Si lo hubiera para esta línea) ---
@@ -451,25 +605,50 @@ public class TermCanvas : ICanvas, IDisposable
                     {
                         sb.Append(ThemeColors.Reset);
                         _cursorColor = ThemeColors.Reset;
-                        sb.Append($"\x1b[{y + 1};{clearX + 1}H\x1b[K");
+                        if (_isInline)
+                        {
+                            if (clearX > inlineCursorX)
+                                sb.Append($"\x1b[{clearX - inlineCursorX}C");
+                            else if (clearX < inlineCursorX)
+                                sb.Append($"\x1b[{inlineCursorX - clearX}D");
+                            sb.Append("\x1b[K");
+                            if (clearX > 0)
+                                sb.Append($"\x1b[{clearX}D");
+                            inlineCursorX = 0;
+                        }
+                        else
+                            sb.Append($"\x1b[{y + 1};{clearX + 1}H\x1b[K");
                         _pendingClearLineX.Remove(y);
                     }
 
+                    // Redibujar las celdas dirty de la fila.
                     for (int x = 0; x < _width; x++)
                     {
                         if (_dirty[x, y])
                         {
-                            // Obtenemos el color de la celda. Si está vacío (null), usamos reset.
                             string cellColor = _buffer[x, y].ColorCode;
                             if (string.IsNullOrEmpty(cellColor)) cellColor = ThemeColors.Reset;
 
-                            // Si no hay cursor seteado o veníamos de un salto, posicionamos
-                            if (cursorX != x || cursorY != y)
+                            if (_isInline)
                             {
-                                // ANSI es base 1, sumamos 1 a las coordenadas
-                                sb.Append($"\x1b[{y + 1};{x + 1}H");
-                                cursorX = x;
-                                cursorY = y;
+                                if (inlineCursorX != x)
+                                {
+                                    int delta = x - inlineCursorX;
+                                    if (delta > 0)
+                                        sb.Append($"\x1b[{delta}C");
+                                    else
+                                        sb.Append($"\x1b[{-delta}D");
+                                    inlineCursorX = x;
+                                }
+                            }
+                            else
+                            {
+                                if (cursorX != x || cursorY != y)
+                                {
+                                    sb.Append($"\x1b[{y + 1};{x + 1}H");
+                                    cursorX = x;
+                                    cursorY = y;
+                                }
                             }
                             if (cellColor != _cursorColor)
                             {
@@ -477,36 +656,60 @@ public class TermCanvas : ICanvas, IDisposable
                                 _cursorColor = cellColor;
                             }
 
-                            // Escribimos el carácter y lo guardamos en _frontBuffer
                             sb.Append(_buffer[x, y].Char);
                             SetFront(x, y, _buffer[x, y].Char, _buffer[x, y].ColorCode);
 
-                            // Avanzamos el cursor lógico un lugar
-                            cursorX++;
+                            if (_isInline)
+                                inlineCursorX++;
+                            else
+                                cursorX++;
 
-                            // Limpiamos el flag dirty
                             _dirty[x, y] = false;
                         }
-                        else
-                            // Si la celda NO está sucia, rompemos la cadena de escritura.
+                        else if (!_isInline)
                             cursorX = null;
                     }
                 }
-                // Limpiamos cualquier comando de línea que haya quedado fuera del rango startY-endY
                 _pendingClearLineX.Clear();
-
                 _anyDirty = false;
-
-                // Reseteamos los límites para el próximo frame
                 _minDirtyY = int.MaxValue;
                 _maxDirtyY = int.MinValue;
+
+                if (_isInline)
+                {
+                    int renderHeight = Math.Max(_inlineHeight, _height);
+                    if (renderHeight < 1) renderHeight = 1;
+                    _inlineHeight = renderHeight;
+                    _lastInlineCursorY = inlineCurrentY;
+                }
             }
 
             // --- Lógica de Cursor Real ---
-            if (CursorVisible && CursorPos.HasValue && (cursorX != CursorPos.Value.X || cursorY != CursorPos.Value.Y))
-                sb.Append($"\x1b[{CursorPos.Value.Y + 1};{CursorPos.Value.X + 1}H");
+            if (_isInline)
+            {
+                if (CursorVisible && CursorPos.HasValue)
+                {
+                    int deltaY = CursorPos.Value.Y - _lastInlineCursorY;
+                    if (deltaY < 0)
+                        sb.Append($"\x1b[{-deltaY}A");
+                    else if (deltaY > 0)
+                        sb.Append($"\x1b[{deltaY}B");
+
+                    sb.Append('\r');
+                    if (CursorPos.Value.X > 0)
+                        sb.Append($"\x1b[{CursorPos.Value.X}C");
+
+                    _lastInlineCursorY = CursorPos.Value.Y;
+                }
+            }
+            else
+                if (CursorVisible && CursorPos.HasValue && (cursorX != CursorPos.Value.X || cursorY != CursorPos.Value.Y))
+                    sb.Append($"\x1b[{CursorPos.Value.Y + 1};{CursorPos.Value.X + 1}H");
+
+            _lastCursorPos = CursorPos;
+
             if (_lastCursorVisible != CursorVisible)
-                sb.Append(CursorVisible ? "\x1b[?25h" : "\x1b[?25l"); // Ocultar cursor
+                sb.Append(CursorVisible ? "\x1b[?25h" : "\x1b[?25l");
 
             _lastCursorVisible = CursorVisible;
             output = sb.Length > 0 ? sb.ToString() : null;
