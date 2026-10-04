@@ -8,6 +8,7 @@ using TermFlow.Dev;
 using TermFlow.Dev.CanvasExt;
 using TermFlow.Core;
 using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace TermFlow.Components.FullScreen
 {
@@ -138,7 +139,7 @@ namespace TermFlow.Components.FullScreen
             var router = new InputRouter(false);
             var filtered = new List<(string Text, int OriginalIndex)>();
             var searchEdit = new LineEdit(prompt, router);
-            var selectedMap = preselected ?? new HashSet<int>();
+            var selectedMap = preselected?.ToHashSet() ?? new HashSet<int>();
             int cursor = items.Count > 0 ? startIndex : 0;
             string query = "";
             int queryCursorPos = 0;

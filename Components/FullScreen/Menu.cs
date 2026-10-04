@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 using TermFlow.Dev;
 using TermFlow.Dev.CanvasExt;
 using TermFlow.Core;
+using System.Collections.ObjectModel;
+using System.Collections.Immutable;
+using System.Linq;
 
 namespace TermFlow.Components.FullScreen
 {
@@ -64,7 +67,7 @@ namespace TermFlow.Components.FullScreen
         /// <returns>El router configurado.</returns>
         /// <exception cref="ArgumentNullException">Si <paramref name="items"/> o cualquier Action es <c>null</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="startIndex"/> está fuera de rango.</exception>
-        public static InputRouter AddBindingsMulti(IReadOnlyList<string> items, int startIndex, Action<int, HashSet<int>> onState, Action<IReadOnlyList<int>> onSuccess, Action onCancel, HashSet<int> preselected = null)
+        public static InputRouter AddBindingsMulti(IReadOnlyList<string> items, int startIndex, Action<int, ImmutableHashSet<int>> onState, Action<ReadOnlyCollection<int>> onSuccess, Action onCancel, HashSet<int> preselected = null)
         {
             ArgumentNullException.ThrowIfNull(items);
             ArgumentNullException.ThrowIfNull(onState);
@@ -73,9 +76,9 @@ namespace TermFlow.Components.FullScreen
 
             var router = new InputRouter();
             int cursor = items.Count > 0 ? startIndex : 0;
-            HashSet<int> selectedMap = preselected ?? new HashSet<int>();
+            HashSet<int> selectedMap = preselected?.ToHashSet() ?? new HashSet<int>();
 
-            void Notify() => onState(cursor, selectedMap);
+            void Notify() => onState(cursor, selectedMap.ToImmutableHashSet());
             void MoveUp() { if (items.Count > 0) { cursor = (cursor - 1 + items.Count) % items.Count; Notify(); } }
             void MoveDown() { if (items.Count > 0) { cursor = (cursor + 1) % items.Count; Notify(); } }
 
@@ -96,7 +99,7 @@ namespace TermFlow.Components.FullScreen
                       int[] result = new int[selectedMap.Count];
                       selectedMap.CopyTo(result);
                       Array.Sort(result);
-                      onSuccess(result);
+                      onSuccess(result.AsReadOnly());
                   });
 
             return router;
@@ -145,7 +148,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="token">Token para cancelar la selección.</param>
         /// <param name="style">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Arreglo con los índices marcados al confirmar (ordenado), o vacío si el usuario cancela.</returns>
-        public static async Task<IReadOnlyList<int>> SelectMultiAsync(string title, IReadOnlyList<string> items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default, Styles? style = null)
+        public static async Task<ReadOnlyCollection<int>> SelectMultiAsync(string title, IReadOnlyList<string> items, bool[] preselected = null, int startIndex = 0, CancellationToken token = default, Styles? style = null)
         {
             if (isMenuRunning) throw new InvalidOperationException("Ya hay un Menu activo");
             else isMenuRunning = true;
@@ -155,26 +158,27 @@ namespace TermFlow.Components.FullScreen
             Engine.EnterFullScreen();
             try
             {
-                IReadOnlyList<int> result = Array.Empty<int>();
+                ReadOnlyCollection<int> result = ReadOnlyCollection<int>.Empty;
 
-                HashSet<int> selectedMap = new();
+                HashSet<int> selectedMapTmp = new();
                 if (preselected != null)
                     for (int i = 0; i < preselected.Length; i++)
-                        if (i < items.Count && preselected[i]) selectedMap.Add(i);
+                        if (i < items.Count && preselected[i]) selectedMapTmp.Add(i);
+                ImmutableHashSet<int> selectedMap = selectedMapTmp.ToImmutableHashSet();
 
                 var router = AddBindingsMulti(items, startIndex,
                     onState: (c, sel) => { _cursor = c; selectedMap = sel; _shouldRender = true; },
                     onSuccess: r => { result = r; _exit = true; },
-                    onCancel: () => { result = Array.Empty<int>(); _exit = true; }, selectedMap);
+                    onCancel: () => { result = ReadOnlyCollection<int>.Empty; _exit = true; }, selectedMapTmp);
 
                 await RunMenuEngine(title, items, selectedMap, router, token, style, startIndex);
                 return result;
             }
-            catch (OperationCanceledException) { return Array.Empty<int>(); }
+            catch (OperationCanceledException) { return ReadOnlyCollection<int>.Empty; }
             finally { Engine.ExitFullScreen(); isMenuRunning = false; }
         }
 
-        private static async Task RunMenuEngine(string title, IReadOnlyList<string> items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, Styles? style, int startIndex)
+        private static async Task RunMenuEngine(string title, IReadOnlyList<string> items, ImmutableHashSet<int> selectedMap, InputRouter router, CancellationToken token, Styles? style, int startIndex)
         {
             var s = style ?? new();
             ScrollState layout = new ScrollState();
@@ -214,7 +218,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="selectedMap">Si no es <c>null</c>, activa el modo checkbox y marca los ítems incluidos.</param>
         /// <param name="router">Enrutador de input encargado de renderizar el footer contextual.</param>
         /// <param name="style">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
-        private static void RenderMenu(TermCanvas canvas, VirtualCanvas canvas2, string title, IReadOnlyList<string> items, int cursor, int scroll, int visibleRows, HashSet<int> selectedMap, InputRouter router, Styles style)
+        private static void RenderMenu(TermCanvas canvas, VirtualCanvas canvas2, string title, IReadOnlyList<string> items, int cursor, int scroll, int visibleRows, ImmutableHashSet<int> selectedMap, InputRouter router, Styles style)
         {
             int W = Console.WindowWidth, H = Console.WindowHeight;
             canvas.Resize(W, H);

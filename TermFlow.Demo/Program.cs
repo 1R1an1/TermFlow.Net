@@ -7,6 +7,7 @@ using TermFlow.Components.FullScreen;
 using TermFlow.Components.FullScreen.TreeExplorer;
 using TermFlow.Components.InLine;
 using TermFlow.Core;
+using System.Collections.ObjectModel;
 
 namespace TermFlow.Demo;
 
@@ -183,7 +184,7 @@ internal class Program
         ThemeColors.Primary = AnsiColor.Blue + AnsiColor.Bold;
         ThemeColors.Selector = ThemeColors.Primary;
         string[] items = ["Lectura", "Escritura", "Ejecución", "Acceso de red", "Acceso admin"];
-        IReadOnlyList<int> sel = await Menu.SelectMultiAsync($"{ThemeColors.Primary}Selección múltiple (permisos){ThemeColors.Reset}", items,
+        ReadOnlyCollection<int> sel = await Menu.SelectMultiAsync($"{ThemeColors.Primary}Selección múltiple (permisos){ThemeColors.Reset}", items,
             style: new Styles
             {
                 DrawBorder = true,
@@ -224,7 +225,7 @@ internal class Program
         ThemeColors.Primary = AnsiColor.Yellow + AnsiColor.Bold;
         ThemeColors.Selector = ThemeColors.Primary;
         string[] items = ["bug", "documentation", "enhancement", "duplicate", "wontfix", "help wanted", "good first issue"];
-        int[] sel = await SearchList.FilterMultiAsync($"{ThemeColors.Primary}Etiquetas (buscá y marcá){ThemeColors.Reset}", items,
+        ReadOnlyCollection<int> sel = await SearchList.FilterMultiAsync($"{ThemeColors.Primary}Etiquetas (buscá y marcá){ThemeColors.Reset}", items,
             style: new Styles
             {
                 DrawBorder = true,
@@ -233,10 +234,10 @@ internal class Program
                 BorderColor = AnsiColor.BgBlack + AnsiColor.Yellow,
                 Margin = (W, H) => (W / 10, 2, W / 10, 2)
             });
-        if (sel.Length == 0) TextViewer.Warn("Sin selección");
+        if (sel.Count == 0) TextViewer.Warn("Sin selección");
         else
         {
-            TextViewer.Success($"Marcaste {sel.Length}:");
+            TextViewer.Success($"Marcaste {sel.Count}:");
             foreach (int i in sel)
                 TextViewer.Info($"  → {items[i]}");
         }
@@ -278,7 +279,7 @@ internal class Program
     {
         string inicio = Directory.GetCurrentDirectory();
         ThemeColors.Selector = ThemeColors.Primary;
-        IReadOnlyList<string> rutas = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Seleccionar múltiples (físico){ThemeColors.Reset}", inicio,
+        ReadOnlyCollection<string> rutas = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Seleccionar múltiples (físico){ThemeColors.Reset}", inicio,
             style: new Styles
             {
                 DrawBorder = true,
@@ -308,7 +309,7 @@ internal class Program
             "rds/staging-db"
         };
         ThemeColors.Selector = ThemeColors.Primary;
-        IReadOnlyList<string> sel = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Recursos virtuales{ThemeColors.Reset}", rutas, virtualRoot: "aws",
+        ReadOnlyCollection<string> sel = await TreeExplorer.ExploreMultiAsync($"{ThemeColors.Primary}Recursos virtuales{ThemeColors.Reset}", rutas, virtualRoot: "aws",
             style: new Styles
             {
                 DrawBorder = true,
