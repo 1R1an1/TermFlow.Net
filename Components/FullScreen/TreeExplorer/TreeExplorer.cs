@@ -2,6 +2,8 @@
  * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -12,6 +14,27 @@ using TermFlow.Core;
 
 namespace TermFlow.Components.FullScreen.TreeExplorer
 {
+    /// <summary>
+    /// Estado del explorador expuesto al callback de render.
+    /// </summary>
+    public readonly struct TreeExplorerState
+    {
+        /// <summary>Cursor dentro de los ítems visibles.</summary>
+        public int Cursor { get; internal init; }
+        /// <summary>Ruta del nodo actualmente abierto.</summary>
+        public string CurrentNode { get; internal init; }
+        /// <summary>Entradas visibles del nodo actual.</summary>
+        public ReadOnlyCollection<ExplorerEntry> Entries { get; internal init; }
+        /// <summary>Indica si el explorador está en modo selección múltiple.</summary>
+        public bool IsMultiSelect { get; internal init; }
+        /// <summary>Filtro activo.</summary>
+        public ExplorerFilter Filter { get; internal init; }
+        /// <summary>Indica si la ruta actual está bloqueada para acceso.</summary>
+        public bool IsBlocked { get; internal init; }
+        /// <summary>Entradas marcadas (incluyendo herencia).</summary>
+        public ImmutableHashSet<ExplorerEntry> Marked { get; internal init; }
+    }
+
     /// <summary>
     /// Navegador de árbol full-screen con soporte para selección única y múltiple.
     /// Funciona contra cualquier <see cref="IExplorerDataSource"/> (físico o virtual)
@@ -41,7 +64,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                 if (marked.Contains(current)) return true;
                 current = source.GetParent(current);
             }
-            return marked.Contains(source.RootPath);
+            return false;
         }
 
         /// <summary>
@@ -154,7 +177,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="token">Token de cancelación.</param>
         /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Array de rutas marcadas o vacío si se cancela.</returns>
-        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
+        public static async Task<ReadOnlyCollection<string>> ExploreMultiAsync(string title, string rootDir, ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
             => await ExploreMultiAsync(title, dataSource: new PhysicalDataSource(rootDir, options), options, token: token, style: style);
 
         /// <summary>
@@ -180,7 +203,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="token">Token de cancelación.</param>
         /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Array de rutas virtuales marcadas o vacío si se cancela.</returns>
-        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
+        public static async Task<ReadOnlyCollection<string>> ExploreMultiAsync(string title, IEnumerable<string> virtualPaths, string virtualRoot = "Root", ExplorerOptions? options = null, CancellationToken token = default, Styles? style = null)
             => await ExploreMultiAsync(title, dataSource: new VirtualDataSource(virtualPaths, options, virtualRoot), options, token: token, style: style);
 
         /// <summary>
@@ -198,8 +221,14 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             Engine.EnterFullScreen();
             try
             {
-                var result = await InternalExploreAsync(title, dataSource, isMulti: false, options, initialPath, token, style);
-                return result.FirstOrDefault() ?? string.Empty;
+                string result = string.Empty;
+                var router = AddBindings(dataSource, options, initialPath,
+                    onState: st => { _state = st; _shouldRender = true; },
+                    onSuccess: path => { result = path; _exit = true; },
+                    onCancel: () => { result = string.Empty; _exit = true; });
+
+                await RunEngineAsync(title, router, token, style);
+                return result;
             }
             catch (OperationCanceledException) { return string.Empty; }
             finally { Engine.ExitFullScreen(); }
@@ -215,36 +244,265 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         /// <param name="token">Token de cancelación.</param>
         /// <param name="style">Estilo visual, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Array de rutas marcadas o vacío si se cancela.</returns>
-        public static async Task<IReadOnlyList<string>> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default, Styles? style = null)
+        public static async Task<ReadOnlyCollection<string>> ExploreMultiAsync(string title, IExplorerDataSource dataSource, ExplorerOptions? options = null, string initialPath = null, CancellationToken token = default, Styles? style = null)
         {
             Engine.EnterFullScreen();
             try
             {
-                return await InternalExploreAsync(title, dataSource, isMulti: true, options, initialPath, token, style);
+                ReadOnlyCollection<string> result = ReadOnlyCollection<string>.Empty;
+                var router = AddBindingsMulti(dataSource, options, initialPath,
+                    onState: st => { _state = st; _shouldRender = true; },
+                    onSuccess: paths => { result = paths; _exit = true; },
+                    onCancel: () => { result = ReadOnlyCollection<string>.Empty; _exit = true; });
+
+                await RunEngineAsync(title, router, token, style);
+                return result;
             }
-            catch (OperationCanceledException) { return Array.Empty<string>(); }
+            catch (OperationCanceledException) { return ReadOnlyCollection<string>.Empty; }
             finally { Engine.ExitFullScreen(); }
         }
 
         #endregion
 
-        #region Motor central
+        #region Estado estático del motor
+
+        private static bool _exit = false;
+        private static bool _shouldRender = false;
+        private static TreeExplorerState _state;
+
+        #endregion
+
+        #region AddBindings
 
         /// <summary>
-        /// Obtiene las entradas hijas de un nodo, usando la variante asíncrona del origen
-        /// si está disponible, o la síncrona en caso contrario.
+        /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección única.
+        /// El motor del explorador (navegación, fetch, memoria de cursor/scroll) vive dentro de los bindings.
+        /// </summary>
+        /// <param name="dataSource">Origen de datos a explorar.</param>
+        /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
+        /// <param name="initialPath">Subruta inicial opcional.</param>
+        /// <param name="onState">Callback invocado cuando el estado cambia.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe la ruta elegida.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <returns>El router configurado.</returns>
+        /// <exception cref="ArgumentNullException">Si <paramref name="dataSource"/> o cualquier Action es <c>null</c>.</exception>
+        public static InputRouter AddBindings(IExplorerDataSource dataSource, ExplorerOptions? optionsNull, string initialPath, Action<TreeExplorerState> onState, Action<string> onSuccess, Action onCancel)
+        {
+            ArgumentNullException.ThrowIfNull(dataSource);
+            ArgumentNullException.ThrowIfNull(onState);
+
+            var options = optionsNull ?? new();
+            ExplorerFilter filter = options.Filter;
+
+            string currentNode = !string.IsNullOrEmpty(initialPath) ? Path.Combine(dataSource.RootPath, initialPath) : dataSource.RootPath;
+            bool isBlocked = options.DeniedPaths.Contains(currentNode);
+            int cursor = 0;
+            List<ExplorerEntry> entries = isBlocked ? new() : LoadEntries(dataSource, currentNode, options);
+            var cursorMemory = new Dictionary<string, int>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+            string pendingBackTarget = null;
+
+            void Notify()
+            {
+                onState(new TreeExplorerState
+                {
+                    Cursor = cursor,
+                    CurrentNode = currentNode,
+                    Entries = entries.AsReadOnly(),
+                    IsMultiSelect = false,
+                    Filter = filter,
+                    IsBlocked = isBlocked,
+                    Marked = null
+                });
+            }
+
+            void MoveUp() { if (cursor > 0) { cursor--; Notify(); } }
+            void MoveDown() { if (entries.Count > 0 && cursor < entries.Count - 1) { cursor++; Notify(); } }
+
+            var router = new InputRouter();
+
+            router.BindCancel(onCancel).BindNavigate(MoveUp, MoveDown).BindScroll(MoveUp, MoveDown)
+                  .Bind("l/→/Enter", "elegir/entrar", () =>
+                  {
+                      if (entries.Count == 0) return;
+                      ExplorerEntry selected = entries[cursor];
+                      if (selected.IsDirectory)
+                      {
+                          cursorMemory[currentNode] = cursor;
+                          currentNode = selected.Id;
+                          isBlocked = options.DeniedPaths.Contains(currentNode);
+                          entries = isBlocked ? new() : LoadEntries(dataSource, currentNode, options);
+                          cursor = RestoreCursor(currentNode, entries, cursorMemory, ref pendingBackTarget);
+                          Notify();
+                      }
+                      else if (filter != ExplorerFilter.OnlyFolders)
+                      {
+                          onSuccess(selected.Id);
+                      }
+                  }, ConsoleKey.L, ConsoleKey.RightArrow, ConsoleKey.Enter)
+                  .Bind("h/←", "volver", () =>
+                  {
+                      string parent = dataSource.GetParent(currentNode);
+                      if (string.IsNullOrEmpty(parent)) return;
+                      if (options.MinDepth > 0 && GetDepth(parent) < options.MinDepth) return;
+
+                      cursorMemory[currentNode] = cursor;
+                      string childNode = currentNode;
+                      currentNode = parent;
+                      pendingBackTarget = childNode;
+                      isBlocked = options.DeniedPaths.Contains(parent);
+                      entries = isBlocked ? new() : LoadEntries(dataSource, currentNode, options);
+                      cursor = RestoreCursor(currentNode, entries, cursorMemory, ref pendingBackTarget);
+                      Notify();
+                  }, ConsoleKey.H, ConsoleKey.LeftArrow)
+                  .BindSelect(() =>
+                  {
+                      if (entries.Count == 0) return;
+                      ExplorerEntry target = entries[cursor];
+                      if (target.IsDirectory && filter != ExplorerFilter.OnlyFiles) onSuccess(target.Id);
+                      else if (!target.IsDirectory && filter != ExplorerFilter.OnlyFolders) onSuccess(target.Id);
+                  }, "elegir");
+
+            Notify();
+            return router;
+        }
+
+        /// <summary>
+        /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección múltiple.
+        /// El motor del explorador (navegación, fetch, memoria de cursor/scroll, marcas con herencia) vive dentro de los bindings.
+        /// </summary>
+        /// <param name="dataSource">Origen de datos a explorar.</param>
+        /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
+        /// <param name="initialPath">Subruta inicial opcional.</param>
+        /// <param name="onState">Callback invocado cuando el estado cambia.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe las rutas marcadas.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <returns>El router configurado.</returns>
+        /// <exception cref="ArgumentNullException">Si <paramref name="dataSource"/> o cualquier Action es <c>null</c>.</exception>
+        public static InputRouter AddBindingsMulti(IExplorerDataSource dataSource, ExplorerOptions? optionsNull, string initialPath, Action<TreeExplorerState> onState, Action<ReadOnlyCollection<string>> onSuccess, Action onCancel)
+        {
+            ArgumentNullException.ThrowIfNull(dataSource);
+            ArgumentNullException.ThrowIfNull(onState);
+
+            var options = optionsNull ?? new();
+            ExplorerFilter filter = options.Filter;
+
+            string currentNode = !string.IsNullOrEmpty(initialPath) ? Path.Combine(dataSource.RootPath, initialPath) : dataSource.RootPath;
+            bool isBlocked = options.DeniedPaths.Contains(currentNode);
+            int cursor = 0;
+            List<ExplorerEntry> entries = isBlocked ? new() : LoadEntries(dataSource, currentNode, options);
+            HashSet<string> marked = new(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+            HashSet<string> unmarkedExceptions = new(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+            var cursorMemory = new Dictionary<string, int>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+            string pendingBackTarget = null;
+
+            void Notify()
+            {
+                onState(new TreeExplorerState
+                {
+                    Cursor = cursor,
+                    CurrentNode = currentNode,
+                    Entries = entries.AsReadOnly(),
+                    IsMultiSelect = true,
+                    Filter = filter,
+                    IsBlocked = isBlocked,
+                    Marked = entries.Where(e => IsPathMarked(e.Id, marked, unmarkedExceptions, dataSource)).ToImmutableHashSet()
+                });
+            }
+
+            void MoveUp() { if (cursor > 0) { cursor--; Notify(); } }
+            void MoveDown() { if (entries.Count > 0 && cursor < entries.Count - 1) { cursor++; Notify(); } }
+
+            var router = new InputRouter();
+
+            router.BindCancel(onCancel).BindNavigate(MoveUp, MoveDown).BindScroll(MoveUp, MoveDown)
+                  .Bind("l/→/Enter", "entrar", () =>
+                  {
+                      if (entries.Count == 0) return;
+                      ExplorerEntry selected = entries[cursor];
+                      if (selected.IsDirectory)
+                      {
+                          cursorMemory[currentNode] = cursor;
+                          currentNode = selected.Id;
+                          isBlocked = options.DeniedPaths.Contains(currentNode);
+                          entries = isBlocked ? new() : LoadEntries(dataSource, currentNode, options);
+                          cursor = RestoreCursor(currentNode, entries, cursorMemory, ref pendingBackTarget);
+                          Notify();
+                      }
+                  }, ConsoleKey.L, ConsoleKey.RightArrow, ConsoleKey.Enter)
+                  .Bind("h/←", "volver", () =>
+                  {
+                      string parent = dataSource.GetParent(currentNode);
+                      if (string.IsNullOrEmpty(parent)) return;
+                      if (options.MinDepth > 0 && GetDepth(parent) < options.MinDepth) return;
+
+                      cursorMemory[currentNode] = cursor;
+                      string childNode = currentNode;
+                      currentNode = parent;
+                      pendingBackTarget = childNode;
+                      isBlocked = options.DeniedPaths.Contains(parent);
+                      entries = isBlocked ? new() : LoadEntries(dataSource, currentNode, options);
+                      cursor = RestoreCursor(currentNode, entries, cursorMemory, ref pendingBackTarget);
+                      Notify();
+                  }, ConsoleKey.H, ConsoleKey.LeftArrow)
+                  .BindSelect(() =>
+                  {
+                      if (entries.Count == 0) return;
+                      ExplorerEntry target = entries[cursor];
+                      if (filter == ExplorerFilter.OnlyFolders && !target.IsDirectory) return;
+                      if (filter == ExplorerFilter.OnlyFiles && target.IsDirectory) return;
+                      ToggleSelection(target.Id, marked, unmarkedExceptions, dataSource);
+                      Notify();
+                  })
+                  .Bind("c", "confirmar", () =>
+                  {
+                      var optimized = dataSource.ResolveMarkedEntries(marked, unmarkedExceptions, filter);
+                      onSuccess((optimized ?? ResolveMarkedEntriesUniversal(dataSource, marked, unmarkedExceptions, filter)).AsReadOnly());
+                  }, ConsoleKey.C);
+
+            Notify();
+            return router;
+        }
+
+        /// <summary>
+        /// Carga las entradas de un nodo aplicando el filtro de HiddenPaths.
         /// </summary>
         /// <param name="dataSource">Origen de datos.</param>
-        /// <param name="nodeId">ID del nodo padre.</param>
-        /// <param name="token">Token de cancelación.</param>
-        /// <returns>Lista de entradas hijas ordenadas.</returns>
-        private static async Task<List<ExplorerEntry>> FetchEntriesAsync(IExplorerDataSource dataSource, string nodeId, CancellationToken token)
+        /// <param name="nodeId">ID del nodo a cargar.</param>
+        /// <param name="options">Opciones con <see cref="ExplorerOptions.HiddenPaths"/>.</param>
+        /// <returns>Lista de entradas visibles.</returns>
+        private static List<ExplorerEntry> LoadEntries(IExplorerDataSource dataSource, string nodeId, ExplorerOptions options)
         {
-            if (dataSource is IAsyncExplorerDataSource asyncSource)
-                return await asyncSource.FetchAndSortEntriesAsync(nodeId, token);
-            // Fuentes síncronas (disco/virtual) son inmediatas, no necesitan Task.Run
-            return dataSource.FetchAndSortEntries(nodeId);
+            var entries = dataSource.FetchAndSortEntries(nodeId);
+            if (options.HiddenPaths.Count > 0)
+                entries = entries.Where(e => !options.HiddenPaths.Contains(e.Id)).ToList();
+            return entries;
         }
+
+        /// <summary>
+        /// Restaura el cursor según la memoria y el pendingBackTarget.
+        /// </summary>
+        /// <param name="currentNode">Nodo actual.</param>
+        /// <param name="entries">Entradas del nodo actual.</param>
+        /// <param name="cursorMemory">Mapa de cursor recordado por nodo.</param>
+        /// <param name="pendingBackTarget">Referencia al hijo a resaltar tras un back.</param>
+        /// <returns>Índice del cursor restaurado.</returns>
+        private static int RestoreCursor(string currentNode, List<ExplorerEntry> entries, Dictionary<string, int> cursorMemory, ref string pendingBackTarget)
+        {
+            if (pendingBackTarget != null)
+            {
+                string targetId = pendingBackTarget;
+                pendingBackTarget = null;
+                int foundIndex = entries.FindIndex(e => string.Equals(e.Id, targetId, StringComparison.OrdinalIgnoreCase));
+                return foundIndex >= 0 ? foundIndex : 0;
+            }
+            if (cursorMemory.TryGetValue(currentNode, out int savedCursor))
+                return Math.Clamp(savedCursor, 0, Math.Max(0, entries.Count - 1));
+            return 0;
+        }
+
+        #endregion
+
+        #region Motor central
 
         /// <summary>
         /// Calcula la profundidad de una ruta absoluta contando sus separadores.
@@ -255,222 +513,54 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             => path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)
                 .Skip(path.Length >= 2 && char.IsLetter(path[0]) && path[1] == ':' ? 1 : 0)
                 .Count();
+
         /// <summary>
-        /// Bucle central de la exploración. Maneja navegación, scroll, marcas (en modo multi)
-        /// y entrada de teclado hasta que el usuario confirma o cancela.
+        /// Loop central del explorador. Recibe el router ya configurado por AddBindings.
         /// </summary>
         /// <param name="title">Título a mostrar.</param>
-        /// <param name="dataSource">Origen de datos a explorar.</param>
-        /// <param name="isMulti"><c>true</c> para selección múltiple con checkboxes.</param>
-        /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
-        /// <param name="initialPath">Subruta inicial opcional.</param>
+        /// <param name="router">Router configurado por AddBindings/AddBindingsMulti.</param>
         /// <param name="token">Token de cancelación.</param>
         /// <param name="styleNull">Estilo visual, o <c>null</c> para usar el por defecto.</param>
-        /// <returns>Array de rutas seleccionadas (vacío si se cancela).</returns>
-        private static async Task<IReadOnlyList<string>> InternalExploreAsync(string title, IExplorerDataSource dataSource, bool isMulti, ExplorerOptions? optionsNull, string initialPath, CancellationToken token, Styles? styleNull)
+        private static async Task RunEngineAsync(string title, InputRouter router, CancellationToken token, Styles? styleNull)
         {
-            var options = optionsNull ?? new();
             var style = styleNull ?? new();
-            ExplorerFilter filter = options.Filter;
-
-            // Si mandas una ruta inicial arranca ahí, si no, usa la raíz del origen de datos
-            string currentNode = !string.IsNullOrEmpty(initialPath) ? Path.Combine(dataSource.RootPath, initialPath) : dataSource.RootPath;
-            bool isBlocked = options.DeniedPaths.Contains(currentNode); // Por si la raíz ya está bloqueada
-
-            int cursor = 0;
-            ScrollState layout = new ScrollState();
-            bool shouldRender = true;
-            using var canvas = new TermCanvas(true, false, 100, (_, _) => shouldRender = true);
+            ScrollState layout = new();
+            _shouldRender = true;
+            _exit = false;
+            using var canvas = new TermCanvas(true, false, 100, onResize: (_, _) => _shouldRender = true);
             var canvas2 = canvas.CreateSubCanvas(0, 0, 0, 0);
 
-            HashSet<string> marked = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
-            HashSet<string> unmarkedExceptions = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
-
-            List<ExplorerEntry> entries = isBlocked ? new() : await FetchEntriesAsync(dataSource, currentNode, token);
-            if (options.HiddenPaths.Count > 0)
-                entries = entries.Where(e => !options.HiddenPaths.Contains(e.Id)).ToList();
-
-            // Recuerda la posición del cursor al salir de un directorio
-            var cursorMemory = new Dictionary<string, int>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
-            string _pendingBackTarget = null;
-
-            // Recuerda la posición del scroll (viewport) al salir
-            var layoutMemory = new Dictionary<string, ScrollState>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
-
-            bool exit = false;
-            string[] result = Array.Empty<string>();
-            bool nodeChanged = false; // Control de estado para carga asíncrona
-
-            var router = new InputRouter()
-                .BindCancel(() => { result = Array.Empty<string>(); exit = true; })
-                .BindNavigate(
-                    () => { if (cursor > 0) cursor--; },
-                    () => { if (entries.Count > 0 && cursor < entries.Count - 1) cursor++; }
-                )
-                .BindScroll(
-                    () => { if (cursor > 0) cursor--; },
-                    () => { if (entries.Count > 0 && cursor < entries.Count - 1) cursor++; }
-                )
-                .Bind("l/→/Enter", isMulti ? "entrar" : "entrar/elegir", () =>
-                {
-                    if (entries.Count == 0) return;
-                    ExplorerEntry selected = entries[cursor];
-                    if (selected.IsDirectory)
-                    {
-                        // Guardar posición actual antes de salir
-                        cursorMemory[currentNode] = cursor;
-                        layoutMemory[currentNode] = layout;
-
-                        currentNode = selected.Id;
-                        isBlocked = options.DeniedPaths.Contains(currentNode);
-                        nodeChanged = true;
-                        // El cursor se fijará después de cargar las entradas
-                    }
-                    else if (!isMulti && filter != ExplorerFilter.OnlyFolders)
-                    {
-                        result = [selected.Id];
-                        exit = true;
-                    }
-                }, ConsoleKey.L, ConsoleKey.RightArrow, ConsoleKey.Enter)
-                .Bind("h/←", "volver", () =>
-                {
-                    string parent = dataSource.GetParent(currentNode);
-                    if (!string.IsNullOrEmpty(parent))
-                    {
-                        // Validar si al retroceder nos pasamos del límite de profundidad permitido
-                        bool depthExceeded = options.MinDepth > 0 && GetDepth(parent) < options.MinDepth;
-                        if (depthExceeded) return; // Si se pasa del límite, no hace nada
-
-                        // Guardar cursor del nodo actual
-                        cursorMemory[currentNode] = cursor;
-                        layoutMemory[currentNode] = layout;
-
-                        // Recordamos el nodo hijo para ubicarlo luego en el padre
-                        string childNode = currentNode;
-                        currentNode = parent;
-                        // Guardamos la referencia al hijo en una variable temporal (se usará tras cargar entradas)
-                        _pendingBackTarget = childNode;
-                        isBlocked = options.DeniedPaths.Contains(parent);
-                        nodeChanged = true;
-                    }
-                }, ConsoleKey.H, ConsoleKey.LeftArrow);
-
-            if (isMulti)
+            while (!token.IsCancellationRequested && !_exit)
             {
-                router.BindSelect(() =>
-                {
-                    if (entries.Count == 0) return;
-                    var target = entries[cursor];
-                    if (filter == ExplorerFilter.OnlyFolders && !target.IsDirectory) return;
-                    if (filter == ExplorerFilter.OnlyFiles && target.IsDirectory) return;
-                    ToggleSelection(target.Id, marked, unmarkedExceptions, dataSource);
-                })
-                .Bind("c", "Confirmar", () =>
-                {
-                    var optimized = dataSource.ResolveMarkedEntries(marked, unmarkedExceptions, filter);
-                    result = optimized ?? ResolveMarkedEntriesUniversal(dataSource, marked, unmarkedExceptions, filter);
-                    exit = true;
-                }, ConsoleKey.C);
-            }
-            else
-            {
-                router.BindSelect(() =>
-                {
-                    if (entries.Count == 0) return;
-                    ExplorerEntry target = entries[cursor];
-                    if (target.IsDirectory && filter != ExplorerFilter.OnlyFiles) { result = new[] { target.Id }; exit = true; }
-                    if (!target.IsDirectory && filter != ExplorerFilter.OnlyFolders) { result = new[] { target.Id }; exit = true; }
-                }, "elegir");
-            }
+                if (layout.Update(_state.Cursor, _state.Entries.Count, ReservedRows + style.AdditionalRows))
+                    _shouldRender = true;
 
-            while (!token.IsCancellationRequested && !exit)
-            {
-                if (layout.Update(cursor, entries.Count, ReservedRows + style.AdditionalRows))
-                    shouldRender = true;
-
-                cursor = layout.Cursor;
-
-                if (shouldRender)
+                if (_shouldRender)
                 {
-                    RenderTree(canvas, canvas2, title, currentNode, entries, layout.Cursor, layout.Scroll, layout.VisibleRows, isMulti, filter, isBlocked, marked, unmarkedExceptions, dataSource, router, style);
-                    shouldRender = false;
+                    RenderTree(canvas, canvas2, title, _state, layout.Cursor, layout.Scroll, layout.VisibleRows, router, style);
+                    _shouldRender = false;
                 }
 
                 var inputEvent = InputReader.ReadInput();
                 if (inputEvent.Type != InputEventType.None)
-                {
-                    shouldRender = true;
                     router.Handle(inputEvent);
-
-                    if (nodeChanged)
-                    {
-                        if (isBlocked)
-                            entries = new List<ExplorerEntry>();
-                        else
-                        {
-                            entries = await FetchEntriesAsync(dataSource, currentNode, token);
-                            if (options.HiddenPaths.Count > 0)
-                                entries = entries.Where(e => !options.HiddenPaths.Contains(e.Id)).ToList();
-                        }
-
-                        // Determinar el cursor deseado
-                        int newCursor = 0;
-                        ScrollState newLayout = new ScrollState(); // Por defecto, scroll nuevo
-
-                        if (_pendingBackTarget != null)
-                        {
-                            // Volviendo atrás: buscar el índice de la carpeta hija en las entradas del padre
-                            var targetId = _pendingBackTarget;
-                            int foundIndex = entries.FindIndex(e => string.Equals(e.Id, targetId, StringComparison.OrdinalIgnoreCase));
-                            newCursor = foundIndex >= 0 ? foundIndex : 0;
-                            _pendingBackTarget = null;
-
-                            // Restauramos el scroll de esta carpeta si lo teníamos
-                            if (layoutMemory.TryGetValue(currentNode, out var savedLayoutBack))
-                                newLayout = savedLayoutBack;
-                        }
-                        else if (cursorMemory.TryGetValue(currentNode, out int savedCursor))
-                        {
-                            // Restaurar cursor guardado para este directorio (si existe)
-                            newCursor = Math.Clamp(savedCursor, 0, Math.Max(0, entries.Count - 1));
-
-                            // Restauramos el scroll si habíamos entrado a esta carpeta antes
-                            if (layoutMemory.TryGetValue(currentNode, out var savedLayoutEnter))
-                                newLayout = savedLayoutEnter;
-                        }
-
-                        cursor = newCursor;
-                        layout = newLayout;
-                        nodeChanged = false;
-                    }
-                }
                 await Task.Delay(15, token);
             }
-
-            return result;
         }
 
         /// <summary>
-        /// Dibuja el explorador completo: cabecera, ruta actual, ítems con checkbox (en modo multi),
-        /// indicadores de scroll y footer contextual con los atajos.
+        /// Render default del explorador.
         /// </summary>
         /// <param name="canvas">TermCanvas reutilizable.</param>
+        /// <param name="canvas2">Sub-canvas reutilizable.</param>
         /// <param name="title">Título a mostrar.</param>
-        /// <param name="currentDir">Ruta del nodo actualmente abierto.</param>
-        /// <param name="entries">Entradas visibles del nodo actual.</param>
-        /// <param name="cursor">Índice del cursor actual.</param>
+        /// <param name="state">Estado actual del explorador.</param>
+        /// <param name="cursor">Cursor clampado por <see cref="ScrollState"/>.</param>
         /// <param name="scroll">Índice del primer ítem visible.</param>
         /// <param name="visibleRows">Cantidad máxima de filas visibles.</param>
-        /// <param name="isMulti">Indica modo selección múltiple (activa checkboxes).</param>
-        /// <param name="filter">Filtro activo (aforda qué entradas muestran checkbox).</param>
-        /// <param name="isBlocked">Indica si la ruta actual está bloqueada para acceso.</param>
-        /// <param name="marked">Conjunto de rutas marcadas.</param>
-        /// <param name="unmarkedExceptions">Conjunto de excepciones de unmark.</param>
-        /// <param name="dataSource">Origen de datos para resolver herencia de marcas.</param>
         /// <param name="router">Enrutador que renderiza el footer.</param>
-        private static void RenderTree(TermCanvas canvas, VirtualCanvas canvas2, string title, string currentDir, List<ExplorerEntry> entries,
-            int cursor, int scroll, int visibleRows, bool isMulti, ExplorerFilter filter, bool isBlocked,
-            HashSet<string> marked, HashSet<string> unmarkedExceptions, IExplorerDataSource dataSource, InputRouter router, Styles style)
+        /// <param name="style">Estilo visual.</param>
+        private static void RenderTree(TermCanvas canvas, VirtualCanvas canvas2, string title, TreeExplorerState state, int cursor, int scroll, int visibleRows, InputRouter router, Styles style)
         {
             int W = Console.WindowWidth, H = Console.WindowHeight;
             canvas.Resize(W, H);
@@ -488,38 +578,36 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             canvas2.Resize(x1, y1, x2, y2);
             canvas2.Clear();
 
-            // 1. Cabecera estática (Coordenadas fijas)
             canvas2.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
-            canvas2.WriteAtAndClear(2, 3, $"Ruta: {ThemeColors.Dim}{currentDir}{ThemeColors.Reset}");
+            canvas2.WriteAtAndClear(2, 3, $"Ruta: {ThemeColors.Dim}{state.CurrentNode}{ThemeColors.Reset}");
 
             if (scroll > 0) canvas2.WriteAtAndClear(2, 4, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
             else canvas2.ClearLine(4);
 
-            int end = Math.Min(entries.Count, scroll + visibleRows);
+            int end = Math.Min(state.Entries.Count, scroll + visibleRows);
 
-            if (entries.Count == 0)
+            if (state.Entries.Count == 0)
             {
-                canvas2.WriteAtAndClear(2, 5, $"  {(isBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}", ThemeColors.Dim);
+                canvas2.WriteAtAndClear(2, 5, $"  {(state.IsBlocked ? "(Carpeta bloqueada)" : "(Carpeta vacía o sin accesos)")}", ThemeColors.Dim);
                 for (int i = 1; i < visibleRows; i++) canvas2.ClearLine(5 + i);
             }
             else
             {
-                canvas2.DrawList(entries, 2, 5, visibleRows, scroll, false, (entry, i) =>
+                canvas2.DrawList(state.Entries, 2, 5, visibleRows, scroll, false, (entry, i) =>
                 {
                     string displayName = entry.IsDirectory ? $"{entry.Name}/" : entry.Name;
 
                     string checkPrefix = "";
-                    if (isMulti)
+                    if (state.IsMultiSelect)
                     {
                         bool showCheckbox = true;
-                        if (filter == ExplorerFilter.OnlyFolders && !entry.IsDirectory) showCheckbox = false;
-                        if (filter == ExplorerFilter.OnlyFiles && entry.IsDirectory) showCheckbox = false;
+                        if (state.Filter == ExplorerFilter.OnlyFolders && !entry.IsDirectory) showCheckbox = false;
+                        if (state.Filter == ExplorerFilter.OnlyFiles && entry.IsDirectory) showCheckbox = false;
 
                         if (showCheckbox)
                         {
-                            bool isChecked = IsPathMarked(entry.Id, marked, unmarkedExceptions, dataSource);
-                            checkPrefix = isChecked ? $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} "
-                                                    : $"{ThemeColors.Dim}{ConsoleGlyphs.Unchecked}{ThemeColors.Reset} ";
+                            checkPrefix = state.Marked.Contains(entry) ? $"{ThemeColors.Success}{ConsoleGlyphs.Checked}{ThemeColors.Reset} "
+                                                                       : $"{ThemeColors.Dim}{ConsoleGlyphs.Unchecked}{ThemeColors.Reset} ";
                         }
                         else
                         {
@@ -535,7 +623,7 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
                 });
             }
 
-            int remaining = entries.Count - end;
+            int remaining = state.Entries.Count - end;
             if (remaining > 0) canvas2.WriteAtAndClear(2, canvas2.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
             else canvas2.ClearLine(canvas2.Height - 3);
 

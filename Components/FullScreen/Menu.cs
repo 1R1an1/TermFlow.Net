@@ -16,22 +16,98 @@ namespace TermFlow.Components.FullScreen
     /// </summary>
     public static class Menu
     {
-        /// <summary>
-        /// Bool interno para prevenir la ejecución de múltiples menus a la vez.
-        /// </summary>
         private static volatile bool isMenuRunning = false;
-
         private const int ReservedRows = 7;
-
         private static int _cursor = 0;
         private static bool _exit = false;
+        private static bool _shouldRender = false;
 
+        /// <summary>
+        /// Configura un <see cref="InputRouter"/> con los bindings de un menú de selección única.
+        /// </summary>
+        /// <param name="items">Lista de opciones del menú.</param>
+        /// <param name="startIndex">Índice inicial del cursor.</param>
+        /// <param name="onState">Callback invocado cuando el cursor cambia. Recibe el índice actual.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe el índice elegido.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <returns>El router configurado.</returns>
+        /// <exception cref="ArgumentNullException">Si <paramref name="items"/> o <paramref name="onState"/> son <c>null</c>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="startIndex"/> está fuera de rango.</exception>
+        public static InputRouter AddBindings(IReadOnlyList<string> items, int startIndex, Action<int> onState, Action<int> onSuccess, Action onCancel)
+        {
+            ArgumentNullException.ThrowIfNull(items);
+            ArgumentNullException.ThrowIfNull(onState);
+            if (items.Count > 0 && (startIndex < 0 || startIndex >= items.Count))
+                throw new ArgumentOutOfRangeException(nameof(startIndex));
+
+            var router = new InputRouter();
+            int cursor = items.Count > 0 ? startIndex : 0;
+
+            void MoveUp() { if (items.Count > 0) { cursor = (cursor - 1 + items.Count) % items.Count; onState(cursor); } }
+            void MoveDown() { if (items.Count > 0) { cursor = (cursor + 1) % items.Count; onState(cursor); } }
+
+            router.BindNavigate(MoveUp, MoveDown).BindScroll(MoveUp, MoveDown).BindCancel(onCancel).BindConfirm(() => { onSuccess(cursor); })
+                  .BindChar("g/G", "extremos", () => { if (items.Count > 0) { cursor = 0; onState(cursor); } }, 'g')
+                  .BindChar("", "", () => { if (items.Count > 0) { cursor = items.Count - 1; onState(cursor); } }, 'G');
+            return router;
+        }
+
+        /// <summary>
+        /// Configura un <see cref="InputRouter"/> con los bindings de un menú de selección múltiple.
+        /// </summary>
+        /// <param name="items">Lista de opciones del menú.</param>
+        /// <param name="startIndex">Índice inicial del cursor.</param>
+        /// <param name="onState">Callback invocado cuando el cursor o la selección cambian. Recibe el cursor y el mapa de seleccionados.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe los índices elegidos.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <param name="preselected">Mapa de índices preseleccionados. Si es <c>null</c>, arranca vacío.</param>
+        /// <returns>El router configurado.</returns>
+        /// <exception cref="ArgumentNullException">Si <paramref name="items"/> o cualquier Action es <c>null</c>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Si <paramref name="startIndex"/> está fuera de rango.</exception>
+        public static InputRouter AddBindingsMulti(IReadOnlyList<string> items, int startIndex, Action<int, HashSet<int>> onState, Action<IReadOnlyList<int>> onSuccess, Action onCancel, HashSet<int> preselected = null)
+        {
+            ArgumentNullException.ThrowIfNull(items);
+            ArgumentNullException.ThrowIfNull(onState);
+            if (items.Count > 0 && (startIndex < 0 || startIndex >= items.Count))
+                throw new ArgumentOutOfRangeException(nameof(startIndex));
+
+            var router = new InputRouter();
+            int cursor = items.Count > 0 ? startIndex : 0;
+            HashSet<int> selectedMap = preselected ?? new HashSet<int>();
+
+            void Notify() => onState(cursor, selectedMap);
+            void MoveUp() { if (items.Count > 0) { cursor = (cursor - 1 + items.Count) % items.Count; Notify(); } }
+            void MoveDown() { if (items.Count > 0) { cursor = (cursor + 1) % items.Count; Notify(); } }
+
+            router.BindNavigate(MoveUp, MoveDown).BindScroll(MoveUp, MoveDown).BindCancel(onCancel)
+                  .BindChar("g/G", "extremos", () => { if (items.Count > 0) { cursor = 0; Notify(); } }, 'g')
+                  .BindChar("", "", () => { if (items.Count > 0) { cursor = items.Count - 1; Notify(); } }, 'G')
+                  .BindSelect(() =>
+                  {
+                      if (items.Count > 0)
+                      {
+                          if (selectedMap.Contains(cursor)) selectedMap.Remove(cursor);
+                          else selectedMap.Add(cursor);
+                          Notify();
+                      }
+                  })
+                  .BindConfirm(() =>
+                  {
+                      int[] result = new int[selectedMap.Count];
+                      selectedMap.CopyTo(result);
+                      Array.Sort(result);
+                      onSuccess(result);
+                  });
+
+            return router;
+        }
 
         /// <summary>
         /// Muestra un menú de selección única a pantalla completa y espera la elección del usuario.
         /// </summary>
         /// <param name="title">Título a mostrar en la cabecera.</param>
         /// <param name="items">Lista de opciones a elegir.</param>
+        /// <param name="startIndex">Índice inicial del cursor.</param>
         /// <param name="token">Token para cancelar la selección.</param>
         /// <param name="style">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Índice del item elegido, o -1 si el usuario cancela (Esc/q).</returns>
@@ -47,9 +123,10 @@ namespace TermFlow.Components.FullScreen
             {
                 int result = -1;
 
-                var router = new InputRouter()
-                    .BindCancel(() => { result = -1; _exit = true; })
-                    .BindConfirm(() => { result = _cursor; _exit = true; });
+                var router = AddBindings(items, startIndex,
+                    onState: c => { _cursor = c; _shouldRender = true; },
+                    onSuccess: c => { result = c; _exit = true; },
+                    onCancel: () => { result = -1; _exit = true; });
 
                 await RunMenuEngine(title, items, null, router, token, style, startIndex);
                 return result;
@@ -64,6 +141,7 @@ namespace TermFlow.Components.FullScreen
         /// <param name="title">Título a mostrar en la cabecera.</param>
         /// <param name="items">Lista de opciones a elegir.</param>
         /// <param name="preselected">Arreglo opcional de bools alineado con <paramref name="items"/> para marcar ítems por defecto.</param>
+        /// <param name="startIndex">Índice inicial del cursor.</param>
         /// <param name="token">Token para cancelar la selección.</param>
         /// <param name="style">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
         /// <returns>Arreglo con los índices marcados al confirmar (ordenado), o vacío si el usuario cancela.</returns>
@@ -77,27 +155,17 @@ namespace TermFlow.Components.FullScreen
             Engine.EnterFullScreen();
             try
             {
-                int[] result = Array.Empty<int>();
+                IReadOnlyList<int> result = Array.Empty<int>();
 
-                HashSet<int> selectedMap = new HashSet<int>();
+                HashSet<int> selectedMap = new();
                 if (preselected != null)
                     for (int i = 0; i < preselected.Length; i++)
                         if (i < items.Count && preselected[i]) selectedMap.Add(i);
 
-                var router = new InputRouter()
-                    .BindSelect(() =>
-                    {
-                        if (selectedMap.Contains(_cursor)) selectedMap.Remove(_cursor);
-                        else selectedMap.Add(_cursor);
-                    })
-                    .BindCancel(() => { result = Array.Empty<int>(); _exit = true; })
-                    .BindConfirm(() =>
-                    {
-                        result = new int[selectedMap.Count];
-                        selectedMap.CopyTo(result);
-                        Array.Sort(result);
-                        _exit = true;
-                    });
+                var router = AddBindingsMulti(items, startIndex,
+                    onState: (c, sel) => { _cursor = c; selectedMap = sel; _shouldRender = true; },
+                    onSuccess: r => { result = r; _exit = true; },
+                    onCancel: () => { result = Array.Empty<int>(); _exit = true; }, selectedMap);
 
                 await RunMenuEngine(title, items, selectedMap, router, token, style, startIndex);
                 return result;
@@ -106,54 +174,30 @@ namespace TermFlow.Components.FullScreen
             finally { Engine.ExitFullScreen(); isMenuRunning = false; }
         }
 
-        /// <summary>
-        /// Motor central compartido que maneja el bucle de renderizado e input.
-        /// </summary>
-        /// <param name="title">Título a mostrar en la cabecera.</param>
-        /// <param name="items">Lista completa de ítems.</param>
-        /// <param name="selectedMap">Mapa de índices seleccionados (null si es selección única).</param>
-        /// <param name="router">Enrutador de input configurado.</param>
-        /// <param name="token">Token de cancelación.</param>
-        /// <param name="styleNull">Estilo visual del menú, o <c>null</c> para usar el por defecto.</param>
-        private static async Task RunMenuEngine(string title, IReadOnlyList<string> items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, Styles? styleNull, int startIndex)
+        private static async Task RunMenuEngine(string title, IReadOnlyList<string> items, HashSet<int> selectedMap, InputRouter router, CancellationToken token, Styles? style, int startIndex)
         {
-            var style = styleNull ?? new();
+            var s = style ?? new();
             ScrollState layout = new ScrollState();
-            bool shouldRender = true;
-            using var canvas = new TermCanvas(true, false, 100, onResize: (_, _) => { shouldRender = true; });
+            _shouldRender = true;
+            using var canvas = new TermCanvas(true, false, 100, onResize: (_, _) => _shouldRender = true);
             var canvas2 = canvas.CreateSubCanvas(0, 0, 0, 0);
 
             _cursor = startIndex;
             _exit = false;
-
-            router.BindNavigate(
-                        () => { if (items.Count > 0) _cursor = (_cursor - 1 + items.Count) % items.Count; },
-                        () => { if (items.Count > 0) _cursor = (_cursor + 1) % items.Count; }
-                    )
-                    .BindScroll(
-                        () => { if (items.Count > 0) _cursor = (_cursor - 1 + items.Count) % items.Count; },
-                        () => { if (items.Count > 0) _cursor = (_cursor + 1) % items.Count; }
-                    )
-                    .BindChar("g/G", "extremos", () => _cursor = 0, 'g')
-                    .BindChar("", "", () => _cursor = items.Count - 1, 'G');
-
             while (!token.IsCancellationRequested && !_exit)
             {
-                if (layout.Update(_cursor, items.Count, ReservedRows + style.AdditionalRows))
-                    shouldRender = true;
+                if (layout.Update(_cursor, items.Count, ReservedRows + s.AdditionalRows))
+                    _shouldRender = true;
 
-                if (shouldRender)
+                if (_shouldRender)
                 {
-                    RenderMenu(canvas, canvas2, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router, style);
-                    shouldRender = false;
+                    RenderMenu(canvas, canvas2, title, items, layout.Cursor, layout.Scroll, layout.VisibleRows, selectedMap, router, s);
+                    _shouldRender = false;
                 }
 
                 var inputEvent = InputReader.ReadInput();
                 if (inputEvent.Type != InputEventType.None)
-                {
-                    shouldRender = true;
                     router.Handle(inputEvent);
-                }
                 await Task.Delay(15, token);
             }
         }
@@ -188,16 +232,13 @@ namespace TermFlow.Components.FullScreen
             canvas2.Resize(x1, y1, x2, y2);
             canvas2.Clear();
 
-            // Cabecera
             canvas2.WriteHeader(2, 1, title, lineColor: ThemeColors.Dim);
 
             int end = Math.Min(items.Count, scroll + visibleRows);
 
-            // Indicador superior
             if (scroll > 0) canvas2.WriteAtAndClear(2, 3, $"↑ ({scroll} más arriba)", ThemeColors.Dim);
             else canvas2.ClearLine(3);
 
-            // Elementos
             canvas2.DrawList(items, 2, 4, visibleRows, scroll, false, (item, i) =>
             {
                 string checkPrefix = "";
@@ -218,7 +259,6 @@ namespace TermFlow.Components.FullScreen
             if (remaining > 0) canvas2.WriteAtAndClear(2, canvas2.Height - 3, $"↓ ({remaining} más abajo)", ThemeColors.Dim);
             else canvas2.ClearLine(canvas2.Height - 3);
 
-            // Footer
             canvas2.WriteAt(2, canvas2.Height - 2, router.RenderFooter());
 
             canvas.Flush();

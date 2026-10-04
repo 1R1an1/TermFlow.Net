@@ -2,8 +2,6 @@
  * Copyright (c) 2026 1R1an1 */
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace TermFlow.Components.FullScreen.TreeExplorer;
 
@@ -23,7 +21,7 @@ public enum ExplorerFilter
 /// <summary>
 /// Tipo de valor compacto para minimizar objetos auxiliares durante renderizado y navegación.
 /// </summary>
-public readonly struct ExplorerEntry
+public readonly record struct ExplorerEntry
 {
     /// <summary>Identificador único de la entrada (ruta completa o virtual).</summary>
     public string Id { get; }
@@ -97,21 +95,6 @@ public interface IExplorerDataSource
     /// <param name="filter">Filtro de tipo de entrada a incluir.</param>
     /// <returns>Array de rutas resueltas, o <c>null</c> para usar la versión genérica del motor.</returns>
     string[] ResolveMarkedEntries(HashSet<string> marked, HashSet<string> unmarkedExceptions, ExplorerFilter filter) => null;
-}
-
-/// <summary>
-/// Extensión opcional para proveedores que realizan I/O asíncrona (red, etc.).
-/// El motor usará automáticamente esta versión si está disponible.
-/// </summary>
-public interface IAsyncExplorerDataSource : IExplorerDataSource
-{
-    /// <summary>
-    /// Variante asíncrona de <see cref="IExplorerDataSource.FetchAndSortEntries"/>.
-    /// </summary>
-    /// <param name="id">Identificador del nodo padre.</param>
-    /// <param name="token">Token de cancelación.</param>
-    /// <returns>Lista de entradas hijas ordenada.</returns>
-    ValueTask<List<ExplorerEntry>> FetchAndSortEntriesAsync(string id, CancellationToken token);
 }
 
 /// <summary>
