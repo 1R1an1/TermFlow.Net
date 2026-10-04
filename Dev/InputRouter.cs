@@ -15,6 +15,7 @@ namespace TermFlow.Dev
     {
         private readonly Dictionary<ConsoleKey, Action> _keyHandlers = new();
         private readonly Dictionary<char, Action> _charHandlers = new();
+        private readonly List<InputRouter> _children = new();
         private Action<ConsoleKeyInfo> _unhandledHandler;
         private Action<ConsoleKeyInfo> _beforeKeyHandler;
         private bool _enableDefaultChars;
@@ -210,36 +211,73 @@ namespace TermFlow.Dev
         // --- PROCESADOR INTERNO DE INPUT ---
 
         /// <summary>
-        /// Intercepta el evento nativo de TermFlow y dispara el delegado correspondiente con máxima velocidad de resolución.
-        /// Prioridad: caracteres exactos &gt; teclas virtuales &gt; fallback.
+        /// Intercepta el evento nativo de TermFlow y dispara el delegado correspondiente.
+        /// Prioridad: children &gt; handlers propios &gt; fallback.
         /// </summary>
         /// <param name="evt">Evento crudo producido por <see cref="InputReader.ReadInput"/>.</param>
-        public void Handle(ConsoleInputEvent evt)
+        /// <returns><c>true</c> si algún handler consumió el evento.</returns>
+        public bool Handle(ConsoleInputEvent evt)
         {
-            if (evt.Type == InputEventType.ScrollUp) { _onScrollUp?.Invoke(); return; }
-            if (evt.Type == InputEventType.ScrollDown) { _onScrollDown?.Invoke(); return; }
+            if (evt.Type == InputEventType.ScrollUp)
+            {
+                foreach (var child in _children)
+                    if (child.Handle(evt)) return true;
+                if (_onScrollUp is not null) { _onScrollUp.Invoke(); return true; }
+                return false;
+            }
+            if (evt.Type == InputEventType.ScrollDown)
+            {
+                foreach (var child in _children)
+                    if (child.Handle(evt)) return true;
+                if (_onScrollDown is not null) { _onScrollDown.Invoke(); return true; }
+                return false;
+            }
 
             if (evt.Type == InputEventType.Key)
             {
                 _beforeKeyHandler?.Invoke(evt.KeyInfo);
-                // 1. Prioridad: Caracteres exactos (Captura sutil de navegación Vim o letras directas)
+
+                foreach (var child in _children)
+                    if (child.Handle(evt)) return true;
+
                 if (_charHandlers.TryGetValue(evt.KeyInfo.KeyChar, out var charAction))
                 {
                     charAction.Invoke();
-                    return;
+                    return true;
                 }
 
-                // 2. Teclas virtuales genéricas de la consola
                 if (_keyHandlers.TryGetValue(evt.KeyInfo.Key, out var keyAction))
                 {
                     keyAction.Invoke();
-                    return;
+                    return true;
                 }
 
-                // Si ninguna tecla coincidió, mandamos el input crudo al fallback (ideal para escribir)
-                _unhandledHandler?.Invoke(evt.KeyInfo);
+                if (_unhandledHandler is not null)
+                {
+                    _unhandledHandler.Invoke(evt.KeyInfo);
+                    return true;
+                }
             }
+            return false;
         }
+
+        /// <summary>
+        /// Agrega un sub-router como child. Sus bindings se evalúan antes que los del propio router.
+        /// </summary>
+        /// <param name="child">Sub-router a agregar.</param>
+        /// <exception cref="ArgumentNullException">Si <paramref name="child"/> es <c>null</c>.</exception>
+        public void AddChild(InputRouter child)
+        {
+            ArgumentNullException.ThrowIfNull(child);
+            if (!_children.Contains(child)) _children.Add(child);
+        }
+
+        /// <summary>
+        /// Quita un sub-router previamente agregado con <see cref="AddChild"/>.
+        /// </summary>
+        /// <param name="child">Sub-router a quitar.</param>
+        /// <returns><c>true</c> si estaba y se quitó; <c>false</c> si no estaba o si es <c>null</c>.</returns>
+        public bool RemoveChild(InputRouter child) => child is not null && _children.Remove(child);
 
         // --- RENDERIZADOR ESTRUCTURAL DE ALTA VELOCIDAD ---
 

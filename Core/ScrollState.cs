@@ -8,7 +8,7 @@ namespace TermFlow.Core
     /// Pequeña estructura de estado que centraliza la matemática del scroll y cursor
     /// para componentes con listas scrollables (Menu, SearchList, TreeExplorer, etc.).
     /// </summary>
-    internal struct ScrollState
+    public struct ScrollState
     {
         /// <summary>Posición lógica del cursor dentro de la lista completa.</summary>
         public int Cursor { get; private set; }
