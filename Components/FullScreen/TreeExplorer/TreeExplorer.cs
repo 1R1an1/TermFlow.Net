@@ -275,6 +275,33 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
         #region AddBindings
 
         /// <summary>
+        /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección única sobre un directorio físico.
+        /// </summary>
+        /// <param name="rootDir">Ruta física raíz a explorar.</param>
+        /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
+        /// <param name="initialPath">Subruta inicial opcional.</param>
+        /// <param name="onState">Callback invocado cuando el estado cambia.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe la ruta elegida.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <returns>El router configurado.</returns>
+        public static InputRouter AddBindings(string rootDir, ExplorerOptions? optionsNull, string initialPath, Action<TreeExplorerState> onState, Action<string> onSuccess, Action onCancel)
+            => AddBindings(new PhysicalDataSource(rootDir, optionsNull), optionsNull, initialPath, onState, onSuccess, onCancel);
+
+        /// <summary>
+        /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección única sobre rutas virtuales.
+        /// </summary>
+        /// <param name="virtualPaths">Rutas virtuales estilo Unix ("a/b/c").</param>
+        /// <param name="virtualRoot">Nombre lógico de la raíz virtual.</param>
+        /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
+        /// <param name="initialPath">Subruta inicial opcional.</param>
+        /// <param name="onState">Callback invocado cuando el estado cambia.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe la ruta elegida.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <returns>El router configurado.</returns>
+        public static InputRouter AddBindings(IEnumerable<string> virtualPaths, string virtualRoot, ExplorerOptions? optionsNull, string initialPath, Action<TreeExplorerState> onState, Action<string> onSuccess, Action onCancel)
+            => AddBindings(new VirtualDataSource(virtualPaths, optionsNull, virtualRoot), optionsNull, initialPath, onState, onSuccess, onCancel);
+
+        /// <summary>
         /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección única.
         /// El motor del explorador (navegación, fetch, memoria de cursor/scroll) vive dentro de los bindings.
         /// </summary>
@@ -365,6 +392,33 @@ namespace TermFlow.Components.FullScreen.TreeExplorer
             Notify();
             return router;
         }
+
+        /// <summary>
+        /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección múltiple sobre un directorio físico.
+        /// </summary>
+        /// <param name="rootDir">Ruta física raíz a explorar.</param>
+        /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
+        /// <param name="initialPath">Subruta inicial opcional.</param>
+        /// <param name="onState">Callback invocado cuando el estado cambia.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe las rutas marcadas.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <returns>El router configurado.</returns>
+        public static InputRouter AddBindingsMulti(string rootDir, ExplorerOptions? optionsNull, string initialPath, Action<TreeExplorerState> onState, Action<ReadOnlyCollection<string>> onSuccess, Action onCancel)
+            => AddBindingsMulti(new PhysicalDataSource(rootDir, optionsNull), optionsNull, initialPath, onState, onSuccess, onCancel);
+
+        /// <summary>
+        /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección múltiple sobre rutas virtuales.
+        /// </summary>
+        /// <param name="virtualPaths">Rutas virtuales estilo Unix ("a/b/c").</param>
+        /// <param name="virtualRoot">Nombre lógico de la raíz virtual.</param>
+        /// <param name="optionsNull">Configuraciones de navegación, filtros y restricciones.</param>
+        /// <param name="initialPath">Subruta inicial opcional.</param>
+        /// <param name="onState">Callback invocado cuando el estado cambia.</param>
+        /// <param name="onSuccess">Callback invocado al confirmar. Recibe las rutas marcadas.</param>
+        /// <param name="onCancel">Callback invocado al cancelar.</param>
+        /// <returns>El router configurado.</returns>
+        public static InputRouter AddBindingsMulti(IEnumerable<string> virtualPaths, string virtualRoot, ExplorerOptions? optionsNull, string initialPath, Action<TreeExplorerState> onState, Action<ReadOnlyCollection<string>> onSuccess, Action onCancel)
+            => AddBindingsMulti(new VirtualDataSource(virtualPaths, optionsNull, virtualRoot), optionsNull, initialPath, onState, onSuccess, onCancel);
 
         /// <summary>
         /// Configura un <see cref="InputRouter"/> con los bindings de un explorador de selección múltiple.
