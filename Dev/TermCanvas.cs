@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using TermFlow.Core;
+using Wcwidth;
 
 namespace TermFlow.Dev;
 
@@ -28,7 +29,7 @@ public class TermCanvas : ICanvas, IDisposable
         /// <summary>
         /// El carácter visible a dibujar en la celda.
         /// </summary>
-        public char Char;
+        public Rune Char;
 
         /// <summary>
         /// El código ANSI (color/estilo) aplicado al carácter.
@@ -36,11 +37,19 @@ public class TermCanvas : ICanvas, IDisposable
         /// (ej: color de frente + negrita) sin instanciar objetos complejos.
         /// </summary>
         public string ColorCode;
+
+        /// <summary>
+        /// Indica si esta celda es la segunda mitad de un carácter wide (CJK, fullwidth, etc.).
+        /// </summary>
+        public bool IsContinuation;
     }
 
     private Cell[,] _buffer;       // Back  Buffer: lo que queremos dibujar
     private Cell[,] _frontBuffer;  // Front Buffer: lo que la terminal realmente tiene ahora
     private bool[,] _dirty;
+
+    private static readonly Rune SpaceRune = new(' ');
+    private static readonly Rune EmptyRune = new('\0');
 
     private int _width;
     private int _height;
@@ -275,46 +284,45 @@ public class TermCanvas : ICanvas, IDisposable
     /// <param name="c">Nuevo carácter.</param>
     /// <param name="colorCode">Nuevo código de color ANSI. Se suele pasar <c>null</c> para limpiar.</param>
     /// <param name="forceDirty">Si no es <c>null</c>, fuerza el estado de suciedad de la celda al valor indicado.</param>
-    private void SetCell(int x, int y, char c, string colorCode, bool? forceDirty = null)
+    private void SetCell(int x, int y, Rune c, string colorCode, bool isContinuation = false, bool? forceDirty = null)
     {
         Cell front = _frontBuffer[x, y];
 
-        // Solo actualizamos y marcamos como sucia si ALGO cambió realmente respecto a la consola real
-        if ((c == ' ' ? front.Char != ' ' && front.Char != '\0' : front.Char != c) || front.ColorCode != colorCode)
+        if ((c == SpaceRune ? front.Char != SpaceRune && front.Char != EmptyRune : front.Char != c) || front.ColorCode != colorCode || front.IsContinuation != isContinuation)
         {
-            ModifyCell(x, y, c, colorCode, dirty: forceDirty.HasValue ? forceDirty.Value : true);
+            ModifyCell(x, y, c, colorCode, isContinuation, dirty: forceDirty.HasValue ? forceDirty.Value : true);
             _anyDirty = true;
 
-            // Actualizar los límites de filas sucias
             if (y < _minDirtyY) _minDirtyY = y;
             if (y > _maxDirtyY) _maxDirtyY = y;
         }
-        else if (_buffer[x, y] is var cell && (c == ' ' ? cell.Char != ' ' && cell.Char != '\0' : cell.Char != c) || cell.ColorCode != colorCode)
-            ModifyCell(x, y, c, colorCode, dirty: false);
+        else if (_buffer[x, y] is var cell && (c == SpaceRune ? cell.Char != SpaceRune && cell.Char != EmptyRune : cell.Char != c) || cell.ColorCode != colorCode || cell.IsContinuation != isContinuation)
+            ModifyCell(x, y, c, colorCode, isContinuation, dirty: false);
     }
     /// <summary>Modifica la celda posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
-    private void ModifyCell(int x, int y, char c, string colorCode, bool dirty)
+    private void ModifyCell(int x, int y, Rune c, string colorCode, bool isContinuation, bool dirty)
     {
         _buffer[x, y].Char = c;
         _buffer[x, y].ColorCode = colorCode;
+        _buffer[x, y].IsContinuation = isContinuation;
         _dirty[x, y] = dirty;
     }
 
     /// <summary>Modifica la celda fisica posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
-    private bool SetFront(int x, int y, char c, string colorCode)
+    private bool SetFront(int x, int y, Rune c, string colorCode, bool isContinuation = false)
     {
-        char oldChar = _frontBuffer[x, y].Char;
+        bool changed = _frontBuffer[x, y].Char != c || _frontBuffer[x, y].IsContinuation != isContinuation;
         _frontBuffer[x, y].Char = c;
         _frontBuffer[x, y].ColorCode = colorCode;
-        if (oldChar != c) return true;
-        else return false;
+        _frontBuffer[x, y].IsContinuation = isContinuation;
+        return changed;
     }
 
     /// <summary>Modifica la celda virtual y la celda fisica posicionada en <paramref name="x"/>, <paramref name="y"/> con los parametros introducidos</summary>
-    private bool SetAll(int x, int y, char c, string colorCode, bool? forceDirty = null)
+    private bool SetAll(int x, int y, Rune c, string colorCode, bool isContinuation = false, bool? forceDirty = null)
     {
-        SetCell(x, y, c, colorCode, forceDirty);
-        return SetFront(x, y, c, colorCode);
+        SetCell(x, y, c, colorCode, isContinuation, forceDirty);
+        return SetFront(x, y, c, colorCode, isContinuation);
     }
 
     /// <summary>
@@ -396,12 +404,10 @@ public class TermCanvas : ICanvas, IDisposable
         int currentX = x;
         int currentY = y;
 
-        // Usamos la extensión para iterar el string de forma limpia
         foreach (var (segment, isAnsi) in text.ParseAnsi())
         {
             if (isAnsi)
             {
-                // Lógica de acumulación de colores
                 if (segment == "\x1b[0m" || segment == "\x1b[m")
                     currentColorCode = ThemeColors.Reset;
                 else
@@ -411,20 +417,26 @@ public class TermCanvas : ICanvas, IDisposable
             {
                 lock (_syncLock)
                 {
-                    // Lógica de escritura de caracteres visibles
-                    foreach (char c in segment)
+                    foreach (Rune r in segment.EnumerateRunes())
                     {
+                        int w = UnicodeCalculator.GetWidth(r);
+                        if (w <= 0) continue;
+
                         if (isVertical)
                         {
                             if (currentY < _height && currentY <= clip)
-                                SetCell(currentX, currentY, c, currentColorCode);
+                                SetCell(currentX, currentY, r, currentColorCode);
                             currentY++;
                         }
                         else
                         {
                             if (currentX < _width && currentX <= clip)
-                                SetCell(currentX, currentY, c, currentColorCode);
-                            currentX++;
+                            {
+                                SetCell(currentX, currentY, r, currentColorCode);
+                                if (w == 2 && currentX + 1 < _width && currentX + 1 <= clip)
+                                    SetCell(currentX + 1, currentY, EmptyRune, currentColorCode, isContinuation: true);
+                            }
+                            currentX += w;
                         }
                     }
                 }
@@ -447,6 +459,16 @@ public class TermCanvas : ICanvas, IDisposable
         WriteInternal(x, y, text, color, isVertical, clip);
     }
 
+    /// <summary>Limpia una celda y, si corresponde, su vecina wide para no dejar mitades huérfanas.</summary>
+    private void ClearCellWideAware(int x, int y, bool? forceDirty = null)
+    {
+        if (x + 1 < _width && _buffer[x + 1, y].IsContinuation)
+            SetCell(x + 1, y, SpaceRune, null, forceDirty: forceDirty);
+        if (x > 0 && _buffer[x, y].IsContinuation)
+            SetCell(x - 1, y, SpaceRune, null, forceDirty: forceDirty);
+        SetCell(x, y, SpaceRune, null, forceDirty: forceDirty);
+    }
+
     /// <summary>
     /// Limpia una fila completa en el canvas poniendo espacios y color <c>null</c>.
     /// </summary>
@@ -461,7 +483,7 @@ public class TermCanvas : ICanvas, IDisposable
             // Actualizamos el buffer interno para que se sepa que está vacío
             bool changed = false;
             for (int x = 0; x < _width; x++)
-                changed |= SetAll(x, y, '\0', null, forceDirty: false);
+                changed |= SetAll(x, y, EmptyRune, null, forceDirty: false);
 
             if (changed)
                 _pendingClearLineX[y] = 0;
@@ -626,6 +648,13 @@ public class TermCanvas : ICanvas, IDisposable
                     {
                         if (_dirty[x, y])
                         {
+                            if (_buffer[x, y].IsContinuation)
+                            {
+                                SetFront(x, y, _buffer[x, y].Char, _buffer[x, y].ColorCode, isContinuation: true);
+                                _dirty[x, y] = false;
+                                continue;
+                            }
+
                             string cellColor = _buffer[x, y].ColorCode;
                             if (string.IsNullOrEmpty(cellColor)) cellColor = ThemeColors.Reset;
 
@@ -656,13 +685,20 @@ public class TermCanvas : ICanvas, IDisposable
                                 _cursorColor = cellColor;
                             }
 
-                            sb.Append(_buffer[x, y].Char);
-                            SetFront(x, y, _buffer[x, y].Char, _buffer[x, y].ColorCode);
+                            bool isWide = x + 1 < _width && _buffer[x + 1, y].IsContinuation;
+                            sb.Append(_buffer[x, y].Char.ToString());
+                            SetFront(x, y, _buffer[x, y].Char, _buffer[x, y].ColorCode, isContinuation: false);
 
-                            if (_isInline)
-                                inlineCursorX++;
+                            if (isWide)
+                            {
+                                SetFront(x + 1, y, _buffer[x + 1, y].Char, _buffer[x + 1, y].ColorCode, isContinuation: true);
+                                _dirty[x + 1, y] = false;
+                                if (_isInline) inlineCursorX += 2; else cursorX += 2;
+                            }
                             else
-                                cursorX++;
+                            {
+                                if (_isInline) inlineCursorX++; else cursorX++;
+                            }
 
                             _dirty[x, y] = false;
                         }
@@ -748,22 +784,22 @@ public class TermCanvas : ICanvas, IDisposable
             if (x1 > x2 || y1 > y2) return;
 
             // OPTIMIZACIÓN: Si el área cubre todo el ancho de la consola, usamos \x1b[K
-            if (x1 == 0 && x2 == _width - 1)
+            if (x2 == _width - 1)
             {
                 for (int y = y1; y <= y2; y++)
                 {
                     bool changed = false;
-                    for (int x = 0; x < _width; x++)
-                        changed |= SetAll(x, y, '\0', null, forceDirty: false);
+                    for (int x = x1; x < _width; x++)
+                        changed |= SetAll(x, y, EmptyRune, null, forceDirty: false);
 
                     if (changed)
-                        _pendingClearLineX[y] = 0;
+                        _pendingClearLineX[y] = x1;
                 }
             }
             else
                 for (int y = y1; y <= y2; y++)
                     for (int x = x1; x <= x2; x++)
-                        SetCell(x, y, ' ', null);
+                        ClearCellWideAware(x, y, null);
         }
     }
 
@@ -789,12 +825,16 @@ public class TermCanvas : ICanvas, IDisposable
         {
             if (length == 0)
             {
+                int startX = x;
+                if (_buffer[x, y].IsContinuation)
+                    startX = x - 1;
+
                 bool changed = false;
-                for (int i = x; i < _width; i++)
-                    changed |= SetAll(i, y, '\0', null, forceDirty: false);
+                for (int i = startX; i < _width; i++)
+                    changed |= SetAll(i, y, EmptyRune, null, forceDirty: false);
 
                 if (changed)
-                    _pendingClearLineX[y] = x;
+                    _pendingClearLineX[y] = startX;
             }
             else
             {
@@ -818,16 +858,15 @@ public class TermCanvas : ICanvas, IDisposable
 
         lock (_syncLock)
         {
-            // Actualizamos el buffer interno a vacío, pero NO lo ensuciamos 
-            // porque el comando ANSI físico se encargará de borrarlo en la terminal.
+            int startX = _buffer[x, y].IsContinuation ? x - 1 : x;
+
             bool changed = false;
             for (int j = y; j < _height; j++)
-                for (int i = (j == y) ? x : 0; i < _width; i++)
-                    changed |= SetAll(i, j, '\0', null, forceDirty: false);
+                for (int i = (j == y) ? startX : 0; i < _width; i++)
+                    changed |= SetAll(i, j, EmptyRune, null, forceDirty: false);
 
-            // Guardamos la coordenada para que el Flush mande el \x1b[J
             if (changed)
-                _pendingClearScreen = (x, y);
+                _pendingClearScreen = (startX, y);
         }
     }
 

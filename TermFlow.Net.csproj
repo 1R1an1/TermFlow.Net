@@ -10,4 +10,8 @@
   <ItemGroup>
     <Compile Remove="TermFlow.Demo\**" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Wcwidth" Version="4.0.1" />
+  </ItemGroup>
 </Project>
