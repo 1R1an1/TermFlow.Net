@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using Wcwidth;
 
 namespace TermFlow.Dev
 {
@@ -12,6 +13,7 @@ namespace TermFlow.Dev
     /// </summary>
     public static class AnsiStringHelper
     {
+        private static readonly Regex AnsiRegex = new(@"\x1b\[[^m]*m", RegexOptions.Compiled);
         /// <summary>
         /// Elimina todos los códigos ANSI de un string.
         /// </summary>
@@ -20,7 +22,7 @@ namespace TermFlow.Dev
         public static string StripAnsi(this string text)
         {
             if (string.IsNullOrEmpty(text)) return text;
-            return Regex.Replace(text, @"\x1b\[[^m]*m", "");
+            return AnsiRegex.Replace(text, "");
         }
 
         /// <summary>
@@ -112,37 +114,54 @@ namespace TermFlow.Dev
              => WrapText(text, width).Count;
 
         /// <summary>
-        /// Trunca un texto a un número máximo de caracteres visibles, conservando ANSI.
+        /// Trunca un texto a un ancho físico máximo en columnas, conservando códigos ANSI.
         /// </summary>
         /// <param name="text">Texto original con posibles ANSI.</param>
-        /// <param name="maxLength">Cantidad máxima de caracteres visibles a conservar.</param>
+        /// <param name="maxWidth">Ancho máximo en columnas físicas a conservar.</param>
         /// <returns>Texto truncado manteniendo los códigos ANSI intactos.</returns>
-        public static string Truncate(this string text, int maxLength)
+        public static string Truncate(this string text, int maxWidth)
         {
-            if (string.IsNullOrEmpty(text) || maxLength <= 0) return "";
+            if (string.IsNullOrWhiteSpace(text) || maxWidth <= 0) return "";
+            if (text.GetRealWidth() <= maxWidth) return text;
 
             var result = new StringBuilder();
-            int visibleCount = 0;
+            int width = 0;
             int pos = 0;
+            int len = text.Length;
 
-            while (pos < text.Length && visibleCount < maxLength)
+            while (pos < len)
             {
-                // Detectar código ANSI
-                if (text[pos] == '\x1b' && pos + 1 < text.Length && text[pos + 1] == '[')
+                char c = text[pos];
+
+                if (c == '\x1b' && pos + 1 < len && text[pos + 1] == '[')
                 {
-                    int end = text.IndexOf('m', pos);
+                    int end = text.IndexOf('m', pos + 2);
                     if (end != -1)
                     {
-                        result.Append(text.Substring(pos, end - pos + 1));
+                        result.Append(text, pos, end - pos + 1);
                         pos = end + 1;
                         continue;
                     }
                 }
 
-                // Carácter normal
-                result.Append(text[pos]);
-                visibleCount++;
-                pos++;
+                int codePoint;
+                int charLength = 1;
+
+                if (char.IsHighSurrogate(c) && pos + 1 < len && char.IsLowSurrogate(text[pos + 1]))
+                {
+                    codePoint = char.ConvertToUtf32(c, text[pos + 1]);
+                    charLength = 2;
+                }
+                else
+                    codePoint = c;
+
+                int w = UnicodeCalculator.GetWidth(codePoint);
+                if (w > 0 && width + w > maxWidth) break;
+
+                if (w > 0) width += w;
+
+                result.Append(text, pos, charLength);
+                pos += charLength;
             }
 
             return result.ToString();
@@ -180,6 +199,38 @@ namespace TermFlow.Dev
                     i++;
                 yield return (text.Substring(start, i - start), false);
             }
+        }
+
+        /// <summary>
+        /// Calcula el ancho físico real que ocupará <paramref name="text"/> en una terminal,
+        /// sumando el ancho de cada codepoint (wide=2, narrow=1, zero-width=0) y salteando secuencias ANSI.
+        /// </summary>
+        /// <param name="text">Texto con posibles secuencias ANSI.</param>
+        /// <returns>Ancho en columnas físicas que el texto ocupará en la terminal.</returns>
+        public static int GetRealWidth(this string text)
+        {
+            if (string.IsNullOrEmpty(text)) return 0;
+
+            int total = 0;
+            int i = 0;
+            var txt = text.StripAnsi();
+            while (i < txt.Length)
+            {
+                char c = txt[i];
+                int codePoint;
+                int charCount;
+                if (char.IsHighSurrogate(c) && i + 1 < txt.Length && char.IsLowSurrogate(txt[i + 1]))
+                {
+                    codePoint = char.ConvertToUtf32(c, txt[i + 1]);
+                    charCount = 2;
+                }
+                else { codePoint = c; charCount = 1; }
+
+                int w = UnicodeCalculator.GetWidth(codePoint);
+                if (w > 0) total += w;
+                i += charCount;
+            }
+            return total;
         }
     }
 }

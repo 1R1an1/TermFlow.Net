@@ -108,7 +108,7 @@ public static class CanvasExt
 
         // 1. Escribimos el texto
         canvas.WriteAt(x, y, text, color);
-        int visualLength = text.GetVisualLength();
+        int visualLength = text.GetRealWidth();
 
         // 2. Limpiamos la linea restante
         try { canvas.ClearLineFrom(x + visualLength, y, length); } catch (ArgumentOutOfRangeException) { }
@@ -132,7 +132,7 @@ public static class CanvasExt
         canvas.WriteAt(x, y, title, titleColor);
 
         // 2. Calculamos el largo visible (ignorando ANSI) y dibujamos el subrayado
-        int visualLength = title.GetVisualLength();
+        int visualLength = title.GetRealWidth();
         if (visualLength > 0)
             canvas.WriteAt(x, y + 1, new string(ConsoleGlyphs.Horizontal, visualLength), lineColor);
     }
