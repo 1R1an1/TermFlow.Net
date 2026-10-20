@@ -63,7 +63,7 @@ namespace TermFlow.Components.InLine
                 if (console.PanelId is not null)
                 {
                     LivePanel.FocusVisualCol = fullPromptVisualLength + cursorPos;
-                    console.Write(prompt + (isPassword ? new string('*', text.Length) : text, false, false));
+                    console.Write(prompt + (isPassword ? new string('*', text.Length) : text), false, false);
                 }
                 else
                 {
