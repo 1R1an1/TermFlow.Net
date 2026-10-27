@@ -44,61 +44,61 @@ namespace TermFlow.Dev
         /// <returns>Lista de líneas envueltas con sus códigos ANSI conservados</returns>
         public static List<string> WrapText(this string text, int width)
         {
+            if (width <= 0 || string.IsNullOrEmpty(text)) return [""];
             var result = new List<string>();
-            if (width <= 0) { result.Add(text ?? ""); return result; }
-            if (string.IsNullOrEmpty(text)) { result.Add(""); return result; }
 
-            // 1. Normalizamos saltos de línea de Windows (\r\n -> \n) y separamos por líneas lógicas originales
-            string[] logicalLines = text.Replace("\r\n", "\n").Split('\n');
-
-            foreach (var logicalLine in logicalLines)
+            // Normalizamos saltos de líneas
+            foreach (var logicalLine in text.Replace("\r\n", "\n").Split('\n'))
             {
-                // Si es una línea completamente vacía (ej. dos saltos seguidos "\n\n"), la añadimos directo
+                // Si es una línea completamente vacía la añadimos directo
                 if (logicalLine.Length == 0)
                 {
                     result.Add("");
                     continue;
                 }
 
-                var currentLine = new StringBuilder();
-                int visibleCount = 0;
-                int pos = 0;
+                StringBuilder currentLine = new(logicalLine.Length), lastAnsi = new(128);
+                int visibleCount = 0, pos = 0, len = logicalLine.Length;
 
-                while (pos < logicalLine.Length)
+                while (pos < len)
                 {
-                    // 2. Detectar código ANSI
-                    if (logicalLine[pos] == '\x1b' && pos + 1 < logicalLine.Length && logicalLine[pos + 1] == '[')
+                    // ANSI: appendear y acumular (si no es reset) para re-aplicar al corte de línea
+                    if (logicalLine[pos] == '\x1b' && pos + 1 < len && logicalLine[pos + 1] == '[')
                     {
                         int end = logicalLine.IndexOf('m', pos);
                         if (end != -1)
                         {
-                            // Añadir el ANSI a la línea en la posición donde aparece
-                            currentLine.Append(logicalLine.Substring(pos, end - pos + 1));
+                            string ansi = logicalLine.Substring(pos, end - pos + 1);
+                            currentLine.Append(ansi);
+                            if (ansi == "\x1b[0m") lastAnsi.Clear();
+                            else lastAnsi.Append(ansi);
                             pos = end + 1;
                             continue;
                         }
                     }
 
-                    // 3. Evaluar el ancho ANTES de agregar el carácter.
-                    // Si ya alcanzamos el límite exacto, cerramos esta línea física e iniciamos la siguiente.
-                    if (visibleCount == width)
+                    // Codepoint (respeta surrogates y wide chars)
+                    char c = logicalLine[pos];
+                    int charLength = (char.IsHighSurrogate(c) && pos + 1 < len && char.IsLowSurrogate(logicalLine[pos + 1])) ? 2 : 1;
+                    int codePoint = charLength == 2 ? char.ConvertToUtf32(c, logicalLine[pos + 1]) : c;
+                    int w = UnicodeCalculator.GetWidth(codePoint);
+                    if (w <= 0) { pos += charLength; continue; }
+
+                    if (visibleCount > 0 && visibleCount + w > width)
                     {
                         result.Add(currentLine.ToString());
-                        currentLine.Clear();
+                        currentLine.Clear().Append(lastAnsi);
                         visibleCount = 0;
                     }
 
-                    // 4. Agregar carácter normal
-                    currentLine.Append(logicalLine[pos]);
-                    visibleCount++;
-                    pos++;
+                    currentLine.Append(logicalLine, pos, charLength);
+                    visibleCount += w;
+                    pos += charLength;
                 }
 
-                // 5. Guardar el residuo final que haya quedado de esta línea lógica
+                // Guarda el residuo final que haya quedado esta línea
                 if (currentLine.Length > 0 || visibleCount == 0)
-                {
                     result.Add(currentLine.ToString());
-                }
             }
 
             return result;
@@ -125,9 +125,7 @@ namespace TermFlow.Dev
             if (text.GetRealWidth() <= maxWidth) return text;
 
             var result = new StringBuilder();
-            int width = 0;
-            int pos = 0;
-            int len = text.Length;
+            int width = 0, pos = 0, len = text.Length;
 
             while (pos < len)
             {
@@ -144,9 +142,7 @@ namespace TermFlow.Dev
                     }
                 }
 
-                int codePoint;
-                int charLength = 1;
-
+                int codePoint, charLength = 1;
                 if (char.IsHighSurrogate(c) && pos + 1 < len && char.IsLowSurrogate(text[pos + 1]))
                 {
                     codePoint = char.ConvertToUtf32(c, text[pos + 1]);
@@ -157,7 +153,6 @@ namespace TermFlow.Dev
 
                 int w = UnicodeCalculator.GetWidth(codePoint);
                 if (w > 0 && width + w > maxWidth) break;
-
                 if (w > 0) width += w;
 
                 result.Append(text, pos, charLength);
